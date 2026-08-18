@@ -1,0 +1,32 @@
+{
+  "name": "mcp-gestao-tarefas",
+  "version": "1.0.0",
+  "description": "MCP Server Standalone para integração de Agentes com o Gestão de Tarefas",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "mcp-gestao-tarefas": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "setup": "tsx src/cli/setup.ts",
+    "auth:token": "tsx src/cli/setup.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.0",
+    "axios": "^1.8.1",
+    "dotenv": "^16.4.7",
+    "simple-git": "^3.27.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.6"
+  }
+}
