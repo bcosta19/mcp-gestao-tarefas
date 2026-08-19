@@ -378,6 +378,20 @@ export function injectSkills(projectDir: string = process.cwd()): string[] {
     }
   }
 
+  // 3. Claude Code Skill directory (~/.claude/skills/gestao-tarefas/SKILL.md)
+  const claudeDir = path.join(homedir, '.claude');
+  if (fs.existsSync(claudeDir)) {
+    try {
+      const claudeSkillDir = path.join(claudeDir, 'skills', 'gestao-tarefas');
+      fs.mkdirSync(claudeSkillDir, { recursive: true });
+      const targetFile = path.join(claudeSkillDir, 'SKILL.md');
+      fs.writeFileSync(targetFile, skillContent, 'utf8');
+      updatedSkills.push(targetFile);
+    } catch {
+      // ignore
+    }
+  }
+
   return updatedSkills;
 }
 
@@ -390,8 +404,9 @@ export function injectIntoMcpClients(
   const updatedFiles: string[] = [];
   const homedir = os.homedir();
 
-  // 1. Clientes MCP JSON padrão (Gemini, Antigravity CLI, Claude Desktop, Cursor)
+  // 1. Clientes MCP JSON padrão (Claude Code, Claude Desktop, Gemini, Antigravity CLI, Cursor)
   const standardConfigs = [
+    path.join(homedir, '.claude.json'),
     path.join(homedir, '.gemini', 'config', 'mcp_config.json'),
     path.join(homedir, '.gemini', 'antigravity-cli', 'mcp_config.json'),
     path.join(homedir, '.config', 'Claude', 'claude_desktop_config.json'),

@@ -96,7 +96,7 @@ npm run build
 node dist/index.js
 ```
 
-Exemplo de configuração para clientes MCP baseados em JSON (Claude Desktop, Antigravity CLI, Cursor):
+Exemplo para o **Claude Code** (`~/.claude.json`), **Claude Desktop** (`claude_desktop_config.json`), **Antigravity CLI** e **Cursor**:
 
 ```json
 {
@@ -113,6 +113,16 @@ Exemplo de configuração para clientes MCP baseados em JSON (Claude Desktop, An
     }
   }
 }
+```
+
+Também é possível adicionar no **Claude Code** via linha de comando:
+
+```bash
+claude mcp add --env GESTAO_TAREFAS_API_URL=https://seu-servidor-de-gestao.exemplo \
+  --env GESTAO_TAREFAS_API_TOKEN=CONFIGURADO_LOCALMENTE \
+  --env OFFLINE_QUEUE_PATH=~/.gestao-tarefas-mcp/queue.sqlite \
+  --env IGNORE_EXTERNAL_PROJECTS=true \
+  --transport stdio gestao-tarefas -- node /caminho/para/mcp-gestao-tarefas/dist/index.js
 ```
 
 Exemplo para o **Codex** (`~/.codex/config.toml`):
