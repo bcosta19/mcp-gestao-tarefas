@@ -26,10 +26,10 @@ pode ser informada pela variável `GESTAO_TAREFAS_API_URL`, pelo argumento
 npm run setup
 ```
 
-Quando a URL não estiver configurada, o assistente solicitará:
+Quando a URL não estiver configurada no ambiente, o assistente sugerirá o padrão da Codemar:
 
 ```text
-URL do Gestão de Tarefas:
+URL do Gestão de Tarefas (https://gestaotarefas-codemar.marica.rj.gov.br):
 ```
 
 Também é possível informar os dados de acesso por argumento:

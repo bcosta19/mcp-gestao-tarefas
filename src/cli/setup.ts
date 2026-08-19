@@ -511,6 +511,8 @@ export async function runSetup() {
   console.log('🚀 MCP Gestão de Tarefas - Login e Configuração Automática');
   console.log('═══════════════════════════════════════════════════════════════════\n');
 
+  const DEFAULT_API_URL = 'https://gestaotarefas-codemar.marica.rj.gov.br';
+
   const options = parseArgs();
   let token = options.token;
   let apiUrl =
@@ -521,7 +523,7 @@ export async function runSetup() {
   let password = options.password;
 
   if (!apiUrl) {
-    apiUrl = await promptInput('👉 URL do Gestão de Tarefas');
+    apiUrl = await promptInput('👉 URL do Gestão de Tarefas', DEFAULT_API_URL);
   }
 
   if (!apiUrl) {
