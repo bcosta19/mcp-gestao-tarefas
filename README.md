@@ -116,6 +116,9 @@ Exemplo de configuração para um cliente MCP:
 
 Após alterar o código, execute `npm run build` e reinicie o cliente MCP.
 
+A visão geral dos componentes e dos fluxos está em
+[ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Configuração por agente de desenvolvimento
 
 Um agente com acesso ao workspace pode configurar o servidor seguindo esta
