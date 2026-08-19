@@ -2,6 +2,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import {
   Colaborador,
   Demanda,
+  ImpactoDemanda,
   Projeto,
   Sprint,
   Subtarefa,
@@ -673,6 +674,22 @@ export class ApiClient {
       return response.data;
     } catch (err) {
       this.handleError(err, `atualizar status da demanda ${demandaId}`);
+    }
+  }
+
+  public async updateDemanda(demandaId: number, data: Partial<Demanda>): Promise<any> {
+    try {
+      const payload: Partial<Demanda> = { ...data };
+      if (payload.impacto && String(payload.impacto) === 'media') {
+        payload.impacto = 'medio' as ImpactoDemanda;
+      }
+      const response = await this.client.put(
+        this.resolveUrl(`/demandas/${demandaId}`),
+        payload
+      );
+      return response.data;
+    } catch (err) {
+      this.handleError(err, `atualizar demanda ${demandaId}`);
     }
   }
 

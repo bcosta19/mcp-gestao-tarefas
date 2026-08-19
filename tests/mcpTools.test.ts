@@ -181,6 +181,18 @@ describe('MCP Tools Full Specification & Behavior', () => {
           return;
         }
 
+        // Route: PUT /demandas/:id
+        if (req.method === 'PUT' && url.pathname.match(/\/demandas\/\d+/)) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              success: true,
+              message: 'Demanda atualizada com sucesso',
+            })
+          );
+          return;
+        }
+
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ message: 'Not found' }));
       });
@@ -401,6 +413,30 @@ describe('MCP Tools Full Specification & Behavior', () => {
       status: 'concluida',
     });
     expect(updateRes.success).toBe(true);
+    queue.close();
+  });
+
+  it('atualizar_demanda updates a demand via PUT /demandas/:id', async () => {
+    const { apiClient, queue } = createServer(testConfig);
+    const result = await apiClient.updateDemanda(104, {
+      titulo: 'Título revisado',
+      prioridade: 'Média',
+      impacto: 'media',
+      status: 'em_teste',
+      data_limite: '2026-09-01',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe('Demanda atualizada com sucesso');
+
+    const updateRequest = mockRequests.find(
+      (r) => r.method === 'PUT' && r.url === '/demandas/104'
+    );
+    expect(updateRequest).toBeDefined();
+    expect(updateRequest?.body?.titulo).toBe('Título revisado');
+    expect(updateRequest?.body?.prioridade).toBe('Média');
+    expect(updateRequest?.body?.impacto).toBe('medio');
+    expect(updateRequest?.body?.status).toBe('em_teste');
     queue.close();
   });
 });

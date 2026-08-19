@@ -76,7 +76,7 @@ O servidor fornece ferramentas para:
 - detectar o projeto atual e seu vínculo com o sistema;
 - listar projetos, demandas e sprints;
 - criar demandas e subtarefas;
-- atualizar subtarefas e consultar detalhes de demandas;
+- atualizar demandas e subtarefas, e consultar detalhes de demandas;
 - associar demandas a sprints;
 - operar com fila offline e sincronizar os itens posteriormente;
 - verificar a conectividade e o estado da autenticação.

@@ -41,6 +41,23 @@ export const ObterDetalhesDemandaSchema = {
   demanda_id: z.number().describe('ID da demanda para consultar detalhes e subtarefas.'),
 };
 
+export const AtualizarDemandaSchema = {
+  demanda_id: z.number().describe('ID da demanda a ser atualizada.'),
+  titulo: z.string().min(1).max(255).optional().describe('Novo título da demanda.'),
+  descricao: z.string().min(1).optional().describe('Nova descrição da demanda (suporta HTML/Markdown).'),
+  prioridade: PrioridadeDemandaEnum.optional().describe('Nova prioridade da demanda: Alta, Média ou Baixa.'),
+  impacto: ImpactoDemandaEnum.optional().describe('Novo impacto: alto, medio ou baixo.'),
+  status: StatusDemandaEnum.optional().describe('Novo status da demanda.'),
+  responsavel_id: z.number().optional().describe('Novo ID do Colaborador responsável.'),
+  sprint_id: z.number().optional().describe('Nova Sprint da demanda.'),
+  data_inicio: z.string().optional().describe('Nova data de início no formato YYYY-MM-DD.'),
+  data_limite: z.string().optional().describe('Nova data limite no formato YYYY-MM-DD.'),
+  classificacao_itil: ClassificacaoItilEnum.optional().describe('Classificação ITIL: incidente ou requisicao.'),
+  tipo_atendimento: z.string().optional().describe('Tipo de atendimento ITIL (ex: desenvolvimento, melhoria, correcao).'),
+  estimativa_pontos: z.number().optional().describe('Nova estimativa de esforço em pontos de história.'),
+  solicitante: z.string().optional().describe('Novo solicitante da demanda.'),
+};
+
 export function registerDemandaTools(
   server: any,
   apiClient: ApiClient,
@@ -262,6 +279,71 @@ export function registerDemandaTools(
                 {
                   status: 'erro',
                   mensagem: `Não foi possível obter detalhes da demanda ${demanda_id}: ${err.message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  server.tool(
+    'atualizar_demanda',
+    'Atualiza campos de uma demanda existente (título, descrição, prioridade, status, responsável, sprint, datas, classificação ITIL, estimativa, solicitante).',
+    AtualizarDemandaSchema,
+    async ({ demanda_id, ...data }: { demanda_id: number; [key: string]: any }) => {
+      try {
+        const result = await apiClient.updateDemanda(demanda_id, data);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  status: 'sucesso',
+                  demanda_id,
+                  mensagem: result?.message || 'Demanda atualizada com sucesso.',
+                  resultado: result,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      } catch (err: any) {
+        if (err instanceof ValidationError) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: 'erro_validacao',
+                    demanda_id,
+                    mensagem: err.message,
+                    erros: err.errors,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  status: 'erro',
+                  demanda_id,
+                  mensagem: `Não foi possível atualizar a demanda: ${err.message}`,
+                  detalhes: err.responseData,
                 },
                 null,
                 2
