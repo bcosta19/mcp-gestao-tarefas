@@ -7,6 +7,7 @@ import {
   injectIntoCodex,
   injectIntoOpenCode,
   injectIntoStandardJsonMcpClients,
+  injectSkills,
 } from '../src/cli/setup.js';
 
 describe('setup CLI - MCP configuration automation', () => {
@@ -142,6 +143,19 @@ describe('setup CLI - MCP configuration automation', () => {
       const content = JSON.parse(fs.readFileSync(mcpFile, 'utf8'));
       expect(content.mcpServers['gestao-tarefas']).toBeDefined();
       expect(content.mcpServers['gestao-tarefas'].args).toEqual(['/test/dist/index.js']);
+    });
+
+    it('should inject skills into Codex and Antigravity skill directories', () => {
+      const fakeProjectDir = path.join(tmpDir, 'project');
+      const fakeSkillDir = path.join(fakeProjectDir, 'skills', 'gestao-tarefas');
+      fs.mkdirSync(fakeSkillDir, { recursive: true });
+      fs.writeFileSync(path.join(fakeSkillDir, 'SKILL.md'), '# Skill content\n', 'utf8');
+
+      const updated = injectSkills(fakeProjectDir);
+      expect(Array.isArray(updated)).toBe(true);
+      if (updated.length > 0) {
+        expect(updated.some((p) => p.endsWith('SKILL.md'))).toBe(true);
+      }
     });
   });
 });

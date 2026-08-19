@@ -328,6 +328,59 @@ export function injectIntoStandardJsonMcpClients(
   }
 }
 
+export function injectSkills(projectDir: string = process.cwd()): string[] {
+  const updatedSkills: string[] = [];
+  const homedir = os.homedir();
+
+  const skillSourceFile = path.join(projectDir, 'skills', 'gestao-tarefas', 'SKILL.md');
+  if (!fs.existsSync(skillSourceFile)) {
+    return updatedSkills;
+  }
+
+  const skillContent = fs.readFileSync(skillSourceFile, 'utf8');
+
+  // 1. Codex Skill directory (~/.codex/skills/gestao-tarefas/SKILL.md)
+  const codexDir = process.env.CODEX_HOME || path.join(homedir, '.codex');
+  if (fs.existsSync(codexDir)) {
+    try {
+      const codexSkillDir = path.join(codexDir, 'skills', 'gestao-tarefas');
+      fs.mkdirSync(codexSkillDir, { recursive: true });
+      const targetFile = path.join(codexSkillDir, 'SKILL.md');
+      fs.writeFileSync(targetFile, skillContent, 'utf8');
+      updatedSkills.push(targetFile);
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Antigravity CLI / Gemini Skill directory (~/.gemini/antigravity-cli/skills/gestao-tarefas/SKILL.md)
+  const antigravityBase = path.join(homedir, '.gemini', 'antigravity-cli');
+  if (fs.existsSync(antigravityBase)) {
+    try {
+      const agySkillDir = path.join(antigravityBase, 'skills', 'gestao-tarefas');
+      fs.mkdirSync(agySkillDir, { recursive: true });
+      const targetFile = path.join(agySkillDir, 'SKILL.md');
+      fs.writeFileSync(targetFile, skillContent, 'utf8');
+      updatedSkills.push(targetFile);
+    } catch {
+      // ignore
+    }
+
+    try {
+      const mcpDir = path.join(antigravityBase, 'mcp', 'gestao-tarefas');
+      if (fs.existsSync(mcpDir)) {
+        const mcpInstructionsFile = path.join(mcpDir, 'instructions.md');
+        fs.writeFileSync(mcpInstructionsFile, skillContent, 'utf8');
+        updatedSkills.push(mcpInstructionsFile);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return updatedSkills;
+}
+
 export function injectIntoMcpClients(
   scriptPath: string,
   apiUrl: string,
@@ -533,9 +586,12 @@ export async function runSetup() {
     'utf8'
   );
 
-  // 3. Injeta automaticamente nos arquivos de configuração do Antigravity / Claude
+  // 3. Injeta automaticamente nos arquivos de configuração dos clientes MCP detectados
   const scriptPath = path.resolve(process.cwd(), 'dist/index.js');
   const injectedConfigs = injectIntoMcpClients(scriptPath, apiUrl, token);
+
+  // 4. Injeta a Skill nos clientes suportados (Codex e Antigravity CLI)
+  const injectedSkills = injectSkills(process.cwd());
 
   console.log('\n✅ Configuração e Token salvos com sucesso!');
   console.log(`   🌐 API URL: ${apiUrl}`);
@@ -543,11 +599,16 @@ export async function runSetup() {
   console.log(`   💾 Cache global atualizado (~/.gestao-tarefas-mcp/config.json)`);
 
   if (injectedConfigs.length > 0) {
-    console.log('\n🤖 Token injetado automaticamente nos clientes MCP detectados:');
+    console.log('\n🤖 Servidor MCP configurado automaticamente em:');
     injectedConfigs.forEach((c) => console.log(`   ✓ ${c}`));
   }
 
-  console.log('\n🎉 Tudo pronto! Não é necessário colar nada manualmente. O MCP já está ativo no Antigravity!\n');
+  if (injectedSkills.length > 0) {
+    console.log('\n🧠 Skill gestao-tarefas instalada automaticamente em:');
+    injectedSkills.forEach((s) => console.log(`   ✓ ${s}`));
+  }
+
+  console.log('\n🎉 Tudo pronto! Não é necessário colar nada manualmente. O MCP já está ativo!\n');
   process.exit(0);
 }
 
