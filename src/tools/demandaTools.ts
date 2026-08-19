@@ -13,7 +13,7 @@ import {
 export const CriarDemandaSchema = {
   projeto_id: z.number().describe('ID do projeto no Gestão de Tarefas.'),
   titulo: z.string().min(1).max(255).describe('Título claro e objetivo da demanda.'),
-  descricao: z.string().min(1).describe('Descrição detalhada da demanda (suporta HTML/Markdown).'),
+  descricao: z.string().min(1).describe('Descrição detalhada da demanda em HTML rich text (<p>, listas, links). Texto simples é convertido automaticamente para HTML.'),
   prioridade: PrioridadeDemandaEnum.describe('Prioridade da demanda: Alta, Média ou Baixa.'),
   impacto: ImpactoDemandaEnum.optional().default('medio').describe('Impacto: alto, medio ou baixo.'),
   status: StatusDemandaEnum.optional().default('para_fazer').describe('Status inicial da demanda.'),
@@ -43,14 +43,16 @@ export const ObterDetalhesDemandaSchema = {
 
 export const AtualizarDemandaSchema = {
   demanda_id: z.number().describe('ID da demanda a ser atualizada.'),
+  projeto_id: z.number().describe('ID do projeto da demanda. Obrigatório no Gestão de Tarefas.'),
   titulo: z.string().min(1).max(255).optional().describe('Novo título da demanda.'),
-  descricao: z.string().min(1).optional().describe('Nova descrição da demanda (suporta HTML/Markdown).'),
+  descricao: z.string().min(1).optional().describe('Nova descrição da demanda em HTML rich text (<p>, listas, links). Texto simples é convertido automaticamente para HTML.'),
   prioridade: PrioridadeDemandaEnum.optional().describe('Nova prioridade da demanda: Alta, Média ou Baixa.'),
   impacto: ImpactoDemandaEnum.optional().describe('Novo impacto: alto, medio ou baixo.'),
   status: StatusDemandaEnum.optional().describe('Novo status da demanda.'),
   responsavel_id: z.number().optional().describe('Novo ID do Colaborador responsável.'),
   sprint_id: z.number().optional().describe('Nova Sprint da demanda.'),
   data_inicio: z.string().optional().describe('Nova data de início no formato YYYY-MM-DD.'),
+  data_fim: z.string().optional().describe('Nova data de término no formato YYYY-MM-DD (vazio para limpar).'),
   data_limite: z.string().optional().describe('Nova data limite no formato YYYY-MM-DD.'),
   classificacao_itil: ClassificacaoItilEnum.optional().describe('Classificação ITIL: incidente ou requisicao.'),
   tipo_atendimento: z.string().optional().describe('Tipo de atendimento ITIL (ex: desenvolvimento, melhoria, correcao).'),
@@ -292,10 +294,13 @@ export function registerDemandaTools(
 
   server.tool(
     'atualizar_demanda',
-    'Atualiza campos de uma demanda existente (título, descrição, prioridade, status, responsável, sprint, datas, classificação ITIL, estimativa, solicitante).',
+    'Atualiza campos de uma demanda existente (projeto, título, descrição, prioridade, status, responsável, sprint, datas, classificação ITIL, estimativa, solicitante).',
     AtualizarDemandaSchema,
     async ({ demanda_id, ...data }: { demanda_id: number; [key: string]: any }) => {
       try {
+        if (data.data_fim === undefined) {
+          data.data_fim = '';
+        }
         const result = await apiClient.updateDemanda(demanda_id, data);
         return {
           content: [

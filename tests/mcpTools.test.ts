@@ -181,6 +181,15 @@ describe('MCP Tools Full Specification & Behavior', () => {
           return;
         }
 
+        // Route: GET /demandas/:id/edit (página de edição com _token CSRF)
+        if (req.method === 'GET' && url.pathname.match(/\/demandas\/\d+\/edit/)) {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(
+            '<form method="post"><input type="hidden" name="_token" value="csrf-token-123" /></form>'
+          );
+          return;
+        }
+
         // Route: PUT /demandas/:id
         if (req.method === 'PUT' && url.pathname.match(/\/demandas\/\d+/)) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -420,6 +429,7 @@ describe('MCP Tools Full Specification & Behavior', () => {
     const { apiClient, queue } = createServer(testConfig);
     const result = await apiClient.updateDemanda(104, {
       titulo: 'Título revisado',
+      descricao: 'Linha 1\n\nLinha 2 com & e <>',
       prioridade: 'Média',
       impacto: 'media',
       status: 'em_teste',
@@ -437,6 +447,10 @@ describe('MCP Tools Full Specification & Behavior', () => {
     expect(updateRequest?.body?.prioridade).toBe('Média');
     expect(updateRequest?.body?.impacto).toBe('medio');
     expect(updateRequest?.body?.status).toBe('em_teste');
+    expect(updateRequest?.body?._token).toBe('csrf-token-123');
+    expect(updateRequest?.body?.descricao).toBe(
+      '<p>Linha 1</p><p>Linha 2 com &amp; e &lt;&gt;</p>'
+    );
     queue.close();
   });
 });

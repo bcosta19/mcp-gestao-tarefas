@@ -169,6 +169,24 @@ function parseSprintDate(value: string | undefined): string | undefined {
   return undefined;
 }
 
+/**
+ * O editor de demandas exige descrição em HTML rich text. Texto simples
+ * (sem tags) é escapado e convertido em parágrafos; conteúdo que já
+ * contém marcação HTML é mantido como está.
+ */
+function toRichTextHtml(value: string | undefined): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (/<\/?[a-z][\s\S]*>/i.test(value)) return value;
+  const escaped = value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
 export class NetworkError extends Error {
   constructor(message: string) {
     super(message);
@@ -380,6 +398,25 @@ export class ApiClient {
   private resolveUrl(pathStr: string): string {
     const cleanPath = pathStr.startsWith('/') ? pathStr : `/${pathStr}`;
     return cleanPath;
+  }
+
+  /**
+   * Busca o token CSRF da sessão a partir de uma página HTML do app
+   * (formulários Laravel embutem um input hidden _token). O
+   * DemandaController valida esse token explicitamente no corpo da
+   * requisição, então só o cabeçalho X-XSRF-TOKEN não basta para atualizar.
+   */
+  private async fetchCsrfToken(pagePath: string): Promise<string | undefined> {
+    try {
+      const response = await this.client.get(this.resolveUrl(pagePath));
+      const html = typeof response.data === 'string' ? response.data : '';
+      const match =
+        html.match(/name=["']_token["']\s+value=["']([^"']+)["']/i) ||
+        html.match(/content=["']([^"']+)["']\s+name=["']csrf-token["']/i);
+      return match?.[1];
+    } catch {
+      return undefined;
+    }
   }
 
   private handleError(error: unknown, contextMsg: string): never {
@@ -594,6 +631,7 @@ export class ApiClient {
   public async createDemanda(data: Partial<Demanda>): Promise<{ success: boolean; id?: number; message?: string; raw?: any }> {
     const payload: Partial<Demanda> = {
       ...data,
+      descricao: toRichTextHtml(data.descricao),
       data_inicio: data.data_inicio || new Date().toISOString().slice(0, 10),
       data_limite: data.data_limite || new Date().toISOString().slice(0, 10),
       impacto: String(data.impacto || '') === 'media' ? 'medio' : data.impacto,
@@ -679,10 +717,23 @@ export class ApiClient {
 
   public async updateDemanda(demandaId: number, data: Partial<Demanda>): Promise<any> {
     try {
-      const payload: Partial<Demanda> = { ...data };
+      const payload: Partial<Demanda> & { _token?: string } = {
+        ...data,
+        descricao: toRichTextHtml(data.descricao),
+      };
       if (payload.impacto && String(payload.impacto) === 'media') {
         payload.impacto = 'medio' as ImpactoDemanda;
       }
+
+      // O DemandaController exige o token CSRF no corpo da requisição.
+      // Extrai o _token da página de edição da demanda (fallback: índice).
+      const token =
+        (await this.fetchCsrfToken(`/demandas/${demandaId}/edit`)) ||
+        (await this.fetchCsrfToken('/demandas'));
+      if (token) {
+        payload._token = token;
+      }
+
       const response = await this.client.put(
         this.resolveUrl(`/demandas/${demandaId}`),
         payload
