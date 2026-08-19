@@ -48,15 +48,15 @@ export function registerDemandaTools(
 ) {
   server.tool(
     'criar_demanda',
-    'Registra uma nova demanda no sistema de Gestão de Tarefas. Não dispara eventos caso o projeto seja identificado como da Prefeitura ou externo. Se a intranet estiver offline, salva na fila local.',
+    'Registra uma nova demanda no sistema de Gestão de Tarefas. A operação é bloqueada para projetos não identificados ou explicitamente ignorados. Se a rede estiver offline, salva na fila local.',
     CriarDemandaSchema,
     async (params: any) => {
       const { diretorio_path: targetDir, ...demandaParams } = params;
 
-      // 1. Verifica se o projeto atual é ignorado (Prefeitura / Externo)
+      // 1. Exige um projeto identificado e não ignorado
       if (detector) {
         const detected = await detector.detectProject(targetDir || process.cwd());
-        if (detected?.ignorado) {
+        if (!detected || detected.ignorado) {
           return {
             content: [
               {
@@ -66,9 +66,9 @@ export function registerDemandaTools(
                     status: 'desativado',
                     mcp_ativo: false,
                     mensagem:
-                      detected.motivo_desativacao ||
-                      'Operação cancelada: O projeto atual é da Prefeitura/externo e está desativado para criação de demandas e disparo de eventos.',
-                    projeto: detected.nome,
+                      detected?.motivo_desativacao ||
+                      'Operação cancelada: nenhum projeto ativo foi identificado para este diretório.',
+                    projeto: detected?.nome,
                   },
                   null,
                   2

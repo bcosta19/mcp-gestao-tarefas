@@ -33,15 +33,15 @@ export function registerSubtarefaTools(
 ) {
   server.tool(
     'criar_subtarefa',
-    'Cria uma subtarefa técnica vinculada a uma demanda existente. Desativado para projetos da Prefeitura/externos. Se offline, armazena na fila local para posterior envio.',
+    'Cria uma subtarefa técnica vinculada a uma demanda existente. A operação é bloqueada para projetos não identificados ou explicitamente ignorados. Se offline, armazena na fila local para posterior envio.',
     CriarSubtarefaSchema,
     async (params: any) => {
       const { diretorio_path: targetDir } = params;
 
-      // 1. Verifica se o projeto atual é ignorado (Prefeitura / Externo)
+      // 1. Exige um projeto identificado e não ignorado
       if (detector) {
         const detected = await detector.detectProject(targetDir || process.cwd());
-        if (detected?.ignorado) {
+        if (!detected || detected.ignorado) {
           return {
             content: [
               {
@@ -51,9 +51,9 @@ export function registerSubtarefaTools(
                     status: 'desativado',
                     mcp_ativo: false,
                     mensagem:
-                      detected.motivo_desativacao ||
-                      'Operação cancelada: O projeto atual é da Prefeitura/externo e está desativado para criação de subtarefas e disparo de eventos.',
-                    projeto: detected.nome,
+                      detected?.motivo_desativacao ||
+                      'Operação cancelada: nenhum projeto ativo foi identificado para este diretório.',
+                    projeto: detected?.nome,
                   },
                   null,
                   2

@@ -63,8 +63,8 @@ GESTAO_TAREFAS_API_URL=https://seu-servidor-de-gestao.exemplo
 GESTAO_TAREFAS_API_TOKEN=cole_a_sessao_web_ou_token_aqui
 OFFLINE_QUEUE_PATH=~/.gestao-tarefas-mcp/queue.sqlite
 REQUEST_TIMEOUT_MS=5000
-IGNORE_PREFEITURA=true
-IGNORED_PROJECT_PATTERNS=prefeitura,pmsp,pref-,pm-,pm_
+IGNORE_EXTERNAL_PROJECTS=true
+IGNORED_PROJECT_PATTERNS=pessoal,personal,externo
 ```
 
 Não coloque tokens, senhas ou cookies em arquivos versionados.
@@ -81,10 +81,11 @@ O servidor fornece ferramentas para:
 - operar com fila offline e sincronizar os itens posteriormente;
 - verificar a conectividade e o estado da autenticação.
 
-Projetos marcados como externos ou pertencentes à Prefeitura podem ser
-ignorados automaticamente. Esse comportamento é controlado por
-`IGNORE_PREFEITURA`, `IGNORED_PROJECT_PATTERNS` e pelo arquivo
-`.gestaotarefas.json`.
+Projetos da Prefeitura permanecem ativos por padrão. Projetos pessoais ou
+externos podem ser ignorados por padrões configurados em
+`IGNORED_PROJECT_PATTERNS`, pela variável `IGNORE_EXTERNAL_PROJECTS` ou pelo arquivo
+`.gestaotarefas.json`. Projetos sem identificação também não podem criar
+registros, evitando o uso acidental do MCP em outros repositórios.
 
 ## Execução
 
@@ -107,7 +108,7 @@ Exemplo de configuração para um cliente MCP:
         "GESTAO_TAREFAS_API_URL": "https://seu-servidor-de-gestao.exemplo",
         "GESTAO_TAREFAS_API_TOKEN": "CONFIGURADO_LOCALMENTE",
         "OFFLINE_QUEUE_PATH": "~/.gestao-tarefas-mcp/queue.sqlite",
-        "IGNORE_PREFEITURA": "true"
+        "IGNORE_EXTERNAL_PROJECTS": "true"
       }
     }
   }

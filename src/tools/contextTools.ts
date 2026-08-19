@@ -26,7 +26,7 @@ export function registerContextTools(
 ) {
   server.tool(
     'obter_contexto_projeto',
-    'Identifica o projeto ativo com base no diretório de trabalho atual (via .gestaotarefas.json ou Git), verificando se o MCP deve operar ou se está desativado (ex: projetos da Prefeitura).',
+    'Identifica o projeto ativo com base no diretório de trabalho atual (via .gestaotarefas.json ou Git), verificando se o MCP deve operar ou se está desativado para projetos externos ou não identificados.',
     ObterContextoProjetoSchema,
     async ({ diretorio_path }: { diretorio_path?: string }) => {
       const targetDir = diretorio_path || process.cwd();
@@ -55,7 +55,7 @@ export function registerContextTools(
         };
       }
 
-      // 2. Check if project is ignored (e.g. Prefeitura)
+      // 2. Check if project is explicitly ignored
       if (detected.ignorado) {
         return {
           content: [
@@ -67,7 +67,7 @@ export function registerContextTools(
                   mcp_ativo: false,
                   motivo:
                     detected.motivo_desativacao ||
-                    'Projeto da Prefeitura ou externo identificado. As operações e eventos de gestão de tarefas estão desativados para este repositório.',
+                    'Projeto externo ou pessoal identificado. As operações e eventos de gestão de tarefas estão desativados para este repositório.',
                   projeto: {
                     id: detected.id,
                     nome: detected.nome,

@@ -19,7 +19,7 @@ describe('Prefeitura & Ignored Projects Bypass', () => {
       offlineQueuePath: path.join(tmpDir, 'queue.sqlite'),
       requestTimeoutMs: 2000,
       ignorePrefeitura: true,
-      ignoredPatterns: ['prefeitura', 'pmsp', 'pref-', 'pm-', 'pm_'],
+      ignoredPatterns: ['pessoal', 'personal', 'externo'],
     };
   });
 
@@ -45,7 +45,7 @@ describe('Prefeitura & Ignored Projects Bypass', () => {
     expect(result?.motivo_desativacao).toContain('fora do escopo');
   });
 
-  it('ContextDetector: should identify project as ignored when tipo is prefeitura in config', async () => {
+  it('ContextDetector: should keep a prefeitura project active when tipo is prefeitura', async () => {
     fs.writeFileSync(
       path.join(tmpDir, '.gestaotarefas.json'),
       JSON.stringify({
@@ -58,46 +58,53 @@ describe('Prefeitura & Ignored Projects Bypass', () => {
     const result = await detector.detectProject(tmpDir);
 
     expect(result).not.toBeNull();
-    expect(result?.ignorado).toBe(true);
-    expect(result?.motivo_desativacao).toContain('prefeitura');
+    expect(result?.ignorado).toBe(false);
+    expect(result?.motivo_desativacao).toBeUndefined();
   });
 
-  it('ContextDetector: should automatically detect prefeitura by folder name', async () => {
+  it('ContextDetector: should not ignore prefeitura by folder name', async () => {
     const prefDir = path.join(tmpDir, 'prefeitura-saude-app');
     fs.mkdirSync(prefDir);
 
     const detector = new ContextDetector(undefined, baseConfig);
     const result = await detector.detectProject(prefDir);
 
-    expect(result).not.toBeNull();
-    expect(result?.ignorado).toBe(true);
-    expect(result?.motivo_desativacao).toContain('Prefeitura');
+    expect(result).toBeNull();
   });
 
-  it('ContextDetector: should automatically detect prefeitura by pmsp / pref- pattern', async () => {
+  it('ContextDetector: should not ignore prefeitura by pmsp / pref- pattern', async () => {
     const prefDir = path.join(tmpDir, 'pmsp-portal-transparencia');
     fs.mkdirSync(prefDir);
 
     const detector = new ContextDetector(undefined, baseConfig);
     const result = await detector.detectProject(prefDir);
 
+    expect(result).toBeNull();
+  });
+
+  it('ContextDetector: should ignore a personal project by configured pattern', async () => {
+    const personalDir = path.join(tmpDir, 'personal-finance-app');
+    fs.mkdirSync(personalDir);
+
+    const detector = new ContextDetector(undefined, baseConfig);
+    const result = await detector.detectProject(personalDir);
+
     expect(result).not.toBeNull();
     expect(result?.ignorado).toBe(true);
   });
 
-  it('MCP Tools: obter_contexto_projeto should report mcp_ativo: false on prefeitura project', async () => {
+  it('MCP Tools: prefeitura project remains active when explicitly configured', async () => {
     const prefDir = path.join(tmpDir, 'prefeitura-educacao');
     fs.mkdirSync(prefDir);
 
     const { detector, queue } = createServer(baseConfig);
     const detected = await detector.detectProject(prefDir);
 
-    expect(detected?.ignorado).toBe(true);
-    expect(detected?.motivo_desativacao).toBeDefined();
+    expect(detected).toBeNull();
     queue.close();
   });
 
-  it('MCP Tools: should prevent creating demanda or subtarefa when project is prefeitura', async () => {
+  it('MCP Tools: should not ignore a prefeitura project', async () => {
     fs.writeFileSync(
       path.join(tmpDir, '.gestaotarefas.json'),
       JSON.stringify({
@@ -108,17 +115,17 @@ describe('Prefeitura & Ignored Projects Bypass', () => {
 
     const { detector, queue } = createServer(baseConfig);
     const detected = await detector.detectProject(tmpDir);
-    expect(detected?.ignorado).toBe(true);
+    expect(detected?.ignorado).toBe(false);
 
     // Verify queue is untouched and operations are blocked
     expect(queue.getPendingCount()).toBe(0);
     queue.close();
   });
 
-  it('criar_demanda uses the explicitly provided project directory for the ignore check', async () => {
+  it('criar_demanda blocks an explicitly external project', async () => {
     fs.writeFileSync(
       path.join(tmpDir, '.gestaotarefas.json'),
-      JSON.stringify({ nome: 'Sistema Prefeitura Municipal', tipo: 'prefeitura' })
+      JSON.stringify({ nome: 'Sistema Externo Particular', tipo: 'externo' })
     );
 
     const { apiClient, queue, detector } = createServer(baseConfig);

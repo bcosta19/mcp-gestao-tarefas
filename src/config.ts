@@ -42,8 +42,14 @@ export function loadConfig(overrides?: Partial<AppConfig>): AppConfig {
 
   const globalUserCfg = loadGlobalUserConfig();
 
-  const envIgnorePrefeitura = process.env.IGNORE_PREFEITURA ?? process.env.GESTAO_TAREFAS_IGNORE_PREFEITURA ?? 'true';
-  const envIgnoredPatterns = process.env.IGNORED_PROJECT_PATTERNS || 'prefeitura,pmsp,pref-,pm-,pm_';
+  // Projetos da Prefeitura são o caso principal de uso. A flag permanece
+  // A variável antiga é aceita para não quebrar instalações existentes.
+  const envIgnoreProjects =
+    process.env.IGNORE_EXTERNAL_PROJECTS ??
+    process.env.IGNORE_PREFEITURA ??
+    process.env.GESTAO_TAREFAS_IGNORE_PREFEITURA ??
+    'true';
+  const envIgnoredPatterns = process.env.IGNORED_PROJECT_PATTERNS || 'pessoal,personal,externo';
 
   return {
     apiUrl: (
@@ -64,7 +70,7 @@ export function loadConfig(overrides?: Partial<AppConfig>): AppConfig {
     ignorePrefeitura:
       overrides?.ignorePrefeitura !== undefined
         ? overrides.ignorePrefeitura
-        : envIgnorePrefeitura.toLowerCase() !== 'false',
+        : envIgnoreProjects.toLowerCase() !== 'false',
     ignoredPatterns:
       overrides?.ignoredPatterns ||
       envIgnoredPatterns.split(',').map((p) => p.trim().toLowerCase()).filter(Boolean),

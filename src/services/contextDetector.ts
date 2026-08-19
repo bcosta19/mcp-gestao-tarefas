@@ -33,16 +33,12 @@ export class ContextDetector {
   }
 
   /**
-   * Verifica se uma string ou metadados de projeto correspondem a padrões de projetos ignorados (ex: Prefeitura)
+   * Verifica se uma string ou metadados correspondem a um projeto que deve ser ignorado.
    */
   public isPrefeituraOrIgnored(
     nameOrPath: string,
     extraInfo?: { departamento?: string; tipo?: string; repoUrl?: string }
   ): { ignored: boolean; reason?: string } {
-    if (!this.ignorePrefeitura) {
-      return { ignored: false };
-    }
-
     const targets = [
       nameOrPath,
       extraInfo?.departamento,
@@ -52,11 +48,15 @@ export class ContextDetector {
       .filter(Boolean)
       .map((s) => s!.toLowerCase());
 
-    if (extraInfo?.tipo === 'prefeitura' || extraInfo?.tipo === 'externo') {
+    if (extraInfo?.tipo === 'externo') {
       return {
         ignored: true,
         reason: `Projeto classificado explicitamente como '${extraInfo.tipo}'. Eventos e registro de tarefas desativados.`,
       };
+    }
+
+    if (!this.ignorePrefeitura) {
+      return { ignored: false };
     }
 
     for (const pattern of this.ignoredPatterns) {
@@ -65,7 +65,7 @@ export class ContextDetector {
         if (target.includes(cleanPattern)) {
           return {
             ignored: true,
-            reason: `Projeto vinculado à Prefeitura/externo (correspondência com padrão '${pattern}'). O registro de eventos no Gestão de Tarefas está desativado.`,
+            reason: `Projeto ignorado por corresponder ao padrão '${pattern}'. O registro de eventos no Gestão de Tarefas está desativado.`,
           };
         }
       }
@@ -94,7 +94,9 @@ export class ContextDetector {
               (typeof parsed.projeto_id === 'number' ||
                 parsed.ignorado === true ||
                 parsed.desativado === true ||
-                parsed.tipo === 'prefeitura')
+                parsed.tipo === 'prefeitura' ||
+                parsed.tipo === 'externo' ||
+                parsed.tipo === 'interno')
             ) {
               return { config: parsed, filePath: fPath };
             }
@@ -202,7 +204,7 @@ export class ContextDetector {
     // Camada 2: Git e Nome da Pasta
     const gitInfo = await this.getGitInfo(resolvedDir);
 
-    // Checa se o Git ou a pasta corresponde a um projeto da prefeitura/ignorado
+    // Checa se o Git ou a pasta corresponde a um projeto explicitamente ignorado
     const gitPrefeituraCheck = this.isPrefeituraOrIgnored(
       gitInfo.repoName || gitInfo.folderName,
       { repoUrl: gitInfo.remoteUrl }

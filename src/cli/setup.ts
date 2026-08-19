@@ -180,7 +180,7 @@ function injectIntoMcpClients(scriptPath: string, apiUrl: string, token: string)
           GESTAO_TAREFAS_API_URL: apiUrl,
           GESTAO_TAREFAS_API_TOKEN: token,
           OFFLINE_QUEUE_PATH: '~/.gestao-tarefas-mcp/queue.sqlite',
-          IGNORE_PREFEITURA: 'true',
+          IGNORE_EXTERNAL_PROJECTS: 'true',
         },
       };
 
@@ -336,7 +336,7 @@ export async function runSetup() {
   envContent = updateEnvKey(envContent, 'GESTAO_TAREFAS_API_URL', apiUrl);
   envContent = updateEnvKey(envContent, 'GESTAO_TAREFAS_API_TOKEN', token);
   envContent = updateEnvKey(envContent, 'OFFLINE_QUEUE_PATH', '~/.gestao-tarefas-mcp/queue.sqlite');
-  envContent = updateEnvKey(envContent, 'IGNORE_PREFEITURA', 'true');
+  envContent = updateEnvKey(envContent, 'IGNORE_EXTERNAL_PROJECTS', 'true');
 
   fs.writeFileSync(envPath, envContent, 'utf8');
 
