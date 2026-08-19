@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { ApiClient } from '../services/apiClient.js';
+import { ApiClient, NetworkError } from '../services/apiClient.js';
+import { OfflineQueue } from '../services/offlineQueue.js';
 
 export const ListarSprintsSchema = {};
 
@@ -8,7 +9,7 @@ export const AssociarDemandaSprintSchema = {
   demanda_id: z.number().describe('ID da demanda que será associada à sprint.'),
 };
 
-export function registerSprintTools(server: any, apiClient: ApiClient) {
+export function registerSprintTools(server: any, apiClient: ApiClient, queue: OfflineQueue) {
   server.tool(
     'listar_sprints',
     'Lista as sprints visíveis, em ordem da mais recente para a mais antiga.',
@@ -17,9 +18,40 @@ export function registerSprintTools(server: any, apiClient: ApiClient) {
       try {
         const sprints = await apiClient.listSprints();
         return {
-          content: [{ type: 'text', text: JSON.stringify({ status: 'sucesso', total: sprints.length, sprints }, null, 2) }],
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                { status: 'sucesso', origem: 'api', total: sprints.length, sprints },
+                null,
+                2
+              ),
+            },
+          ],
         };
       } catch (err: any) {
+        // Offline: devolve a última lista persistida localmente.
+        if (err instanceof NetworkError) {
+          const cached = queue.getSprints();
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: 'sucesso_offline',
+                    origem: 'cache',
+                    mensagem: 'API indisponível; lista exibida do cache local.',
+                    total: cached.length,
+                    sprints: cached,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
         return {
           content: [{ type: 'text', text: JSON.stringify({ status: 'erro', mensagem: `Não foi possível listar sprints: ${err.message}` }, null, 2) }],
         };

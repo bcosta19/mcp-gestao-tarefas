@@ -51,7 +51,20 @@ describe('ApiClient (HTTP & Error Handling)', () => {
 
       if (req.method === 'GET' && (url.pathname === '/sprints' || url.pathname === '/api/sprints')) {
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end('<button data-sprint-nome="Sprint 8.0" data-show-url="/sprints/27"></button><button data-sprint-nome="Sprint 7.0" data-show-url="/sprints/26"></button>');
+        res.end(`<table><tbody>
+          <tr>
+            <td data-col="inicio"><div class="sprint-date">01/08/2026</div></td>
+            <td data-col="fim"><div class="sprint-date">31/08/2026</div></td>
+            <td data-col="status" data-order="ativa"><span class="status-badge status-ativa">Ativa</span></td>
+            <td><button data-sprint-nome="Sprint 8.0" data-show-url="/sprints/27"></button></td>
+          </tr>
+          <tr>
+            <td data-col="inicio"><div class="sprint-date">01/07/2026</div></td>
+            <td data-col="fim"><div class="sprint-date">31/07/2026</div></td>
+            <td data-col="status" data-order="concluida"><span class="status-badge status-concluida">Concluída</span></td>
+            <td><button data-sprint-nome="Sprint 7.0" data-show-url="/sprints/26"></button></td>
+          </tr>
+        </tbody></table>`);
         return;
       }
 
@@ -200,8 +213,20 @@ describe('ApiClient (HTTP & Error Handling)', () => {
     const sprints = await client.listSprints();
 
     expect(sprints).toEqual([
-      { id: 27, nome: 'Sprint 8.0' },
-      { id: 26, nome: 'Sprint 7.0' },
+      {
+        id: 27,
+        nome: 'Sprint 8.0',
+        data_inicio: '2026-08-01',
+        data_fim: '2026-08-31',
+        status: 'ativa',
+      },
+      {
+        id: 26,
+        nome: 'Sprint 7.0',
+        data_inicio: '2026-07-01',
+        data_fim: '2026-07-31',
+        status: 'concluida',
+      },
     ]);
   });
 

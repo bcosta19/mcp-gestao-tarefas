@@ -4,6 +4,7 @@ import { ApiClient } from './services/apiClient.js';
 import { OfflineQueue } from './services/offlineQueue.js';
 import { ContextDetector } from './services/contextDetector.js';
 import { SyncService } from './services/syncService.js';
+import { SprintService } from './services/sprintService.js';
 import { registerContextTools } from './tools/contextTools.js';
 import { registerDemandaTools } from './tools/demandaTools.js';
 import { registerSubtarefaTools } from './tools/subtarefaTools.js';
@@ -16,6 +17,7 @@ export interface ServerInstance {
   queue: OfflineQueue;
   detector: ContextDetector;
   syncService: SyncService;
+  sprintService: SprintService;
 }
 
 export function createServer(config: AppConfig): ServerInstance {
@@ -28,13 +30,14 @@ export function createServer(config: AppConfig): ServerInstance {
   const queue = new OfflineQueue(config.offlineQueuePath);
   const detector = new ContextDetector(apiClient, config);
   const syncService = new SyncService(apiClient, queue);
+  const sprintService = new SprintService(apiClient, queue);
 
   // Register all tools
-  registerContextTools(server, apiClient, detector, queue);
+  registerContextTools(server, apiClient, detector, queue, sprintService);
   registerDemandaTools(server, apiClient, queue, detector);
   registerSubtarefaTools(server, apiClient, queue, detector);
   registerSyncTools(server, apiClient, queue, syncService);
-  registerSprintTools(server, apiClient);
+  registerSprintTools(server, apiClient, queue);
 
   return {
     server,
@@ -42,5 +45,6 @@ export function createServer(config: AppConfig): ServerInstance {
     queue,
     detector,
     syncService,
+    sprintService,
   };
 }

@@ -2,7 +2,11 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { QueueItem } from '../types.js';
+import { QueueItem, Sprint } from '../types.js';
+
+export interface CachedSprint extends Sprint {
+  fetched_at: string;
+}
 
 export class OfflineQueue {
   private db: DatabaseSync;
@@ -35,7 +39,72 @@ export class OfflineQueue {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_offline_queue_status ON offline_queue(status);
+
+      CREATE TABLE IF NOT EXISTS sprint_cache (
+        sprint_id INTEGER PRIMARY KEY,
+        nome TEXT NOT NULL,
+        data_inicio TEXT,
+        data_fim TEXT,
+        status TEXT,
+        fetched_at TEXT NOT NULL
+      );
     `);
+  }
+
+  /**
+   * Persiste a lista de sprints recebida da API (ou recarregada do cache).
+   * Usado pela persistência local de sprint para funcionar offline.
+   */
+  public saveSprints(sprints: Sprint[], fetchedAt?: Date): void {
+    const at = (fetchedAt || new Date()).toISOString();
+    const stmt = this.db.prepare(`
+      INSERT INTO sprint_cache (sprint_id, nome, data_inicio, data_fim, status, fetched_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(sprint_id) DO UPDATE SET
+        nome = excluded.nome,
+        data_inicio = excluded.data_inicio,
+        data_fim = excluded.data_fim,
+        status = excluded.status,
+        fetched_at = excluded.fetched_at
+    `);
+
+    for (const sprint of sprints) {
+      if (!sprint.id) continue;
+      stmt.run(
+        sprint.id,
+        sprint.nome || '',
+        sprint.data_inicio || null,
+        sprint.data_fim || null,
+        sprint.status || null,
+        at
+      );
+    }
+  }
+
+  public getSprints(): CachedSprint[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM sprint_cache
+      ORDER BY data_fim DESC, sprint_id DESC
+    `);
+    const rows = stmt.all() as any[];
+    return rows.map((row) => ({
+      id: Number(row.sprint_id),
+      nome: String(row.nome),
+      data_inicio: row.data_inicio ? String(row.data_inicio) : undefined,
+      data_fim: row.data_fim ? String(row.data_fim) : undefined,
+      status: row.status ? String(row.status) : undefined,
+      fetched_at: String(row.fetched_at),
+    }));
+  }
+
+  public getSprintCount(): number {
+    const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM sprint_cache`);
+    const row = stmt.get() as any;
+    return Number(row?.count || 0);
+  }
+
+  public clearSprints(): void {
+    this.db.exec('DELETE FROM sprint_cache');
   }
 
   public enqueue(

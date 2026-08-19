@@ -17,6 +17,7 @@ describe('SyncService (Offline-to-Online Sync)', () => {
   let syncService: SyncService;
   let createdDemandsCount = 0;
   let createdSubtasks: any[] = [];
+  let sprintAssociations: Array<{ sprintId: number; demandaId: number }> = [];
 
   beforeAll(async () => {
     server = http.createServer((req, res) => {
@@ -66,6 +67,20 @@ describe('SyncService (Offline-to-Online Sync)', () => {
         return;
       }
 
+      const matchSprint = url.pathname.match(/\/sprints\/(\d+)\/adicionar-demanda/);
+      if (req.method === 'POST' && matchSprint) {
+        const sprintId = Number(matchSprint[1]);
+        let body = '';
+        req.on('data', (c) => (body += c));
+        req.on('end', () => {
+          const parsed = JSON.parse(body || '{}');
+          sprintAssociations.push({ sprintId, demandaId: Number(parsed.demanda_id) });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: 'Demanda associada à sprint.' }));
+        });
+        return;
+      }
+
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ message: 'Not found' }));
     });
@@ -91,6 +106,7 @@ describe('SyncService (Offline-to-Online Sync)', () => {
     syncService = new SyncService(apiClient, queue);
     createdDemandsCount = 0;
     createdSubtasks = [];
+    sprintAssociations = [];
   });
 
   afterEach(() => {
@@ -159,6 +175,27 @@ describe('SyncService (Offline-to-Online Sync)', () => {
     expect(createdSubtasks).toHaveLength(1);
     expect(createdSubtasks[0].parentDemandaId).toBe(301);
     expect(createdSubtasks[0].titulo).toBe('Subtarefa vinculada localmente');
+  });
+
+  it('should associate a synced offline demand to its declared sprint', async () => {
+    const demand = queue.enqueue('demanda', {
+      projeto_id: 1,
+      titulo: 'Demanda Criada Offline com Sprint',
+      descricao: 'Descrição',
+      prioridade: 'Alta',
+      sprint_id: 2,
+    });
+
+    const result = await syncService.sync();
+    expect(result.total_processed).toBe(1);
+    expect(result.succeeded).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(queue.getSyncedCount()).toBe(1);
+
+    const syncedItem = queue.getItemById(demand.id!);
+    expect(sprintAssociations).toEqual([
+      { sprintId: 2, demandaId: syncedItem?.remote_id },
+    ]);
   });
 
   it('should mark invalid items as failed and proceed with valid items', async () => {

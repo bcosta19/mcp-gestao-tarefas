@@ -68,6 +68,21 @@ export class SyncService {
             this.queue.markSynced(item.id, remoteId);
           }
 
+          // A API web não persiste sprint_id no cadastro da demanda; a
+          // associação exige o endpoint próprio da sprint. Como o item offline
+          // declarou a sprint, vincula agora que o ID remoto existe.
+          if (remoteId && item.payload.sprint_id) {
+            try {
+              await this.apiClient.addDemandaToSprint(
+                Number(item.payload.sprint_id),
+                remoteId
+              );
+            } catch {
+              // A demanda foi criada; a associação à sprint falhou sem
+              // invalidar a sincronização.
+            }
+          }
+
           if (remoteId) {
             idMap.set(item.client_id, remoteId);
             if (item.id) {

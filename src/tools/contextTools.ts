@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ApiClient } from '../services/apiClient.js';
 import { ContextDetector } from '../services/contextDetector.js';
 import { OfflineQueue } from '../services/offlineQueue.js';
+import { SprintService } from '../services/sprintService.js';
 
 export const ObterContextoProjetoSchema = {
   diretorio_path: z
@@ -22,7 +23,8 @@ export function registerContextTools(
   server: any,
   apiClient: ApiClient,
   detector: ContextDetector,
-  queue: OfflineQueue
+  queue: OfflineQueue,
+  sprintService: SprintService
 ) {
   server.tool(
     'obter_contexto_projeto',
@@ -87,17 +89,57 @@ export function registerContextTools(
       // 3. Fetch project context from API (or offline fallback)
       let demandasAtivas: any[] = [];
       let sprintAtual: any = null;
+      let origemSprint: string | null = null;
       let online = false;
 
       if (detected.id) {
         try {
-          demandasAtivas = await apiClient.listDemandas({
-            projeto_id: detected.id,
-            status: 'fazendo',
-          });
-          online = true;
-        } catch (e) {
-          online = false;
+          // 3.1 Sprint ativa com persistência local: usa o cache se o intervalo
+          // cobrir a data atual (funciona offline) e só consulta a API quando o
+          // cache não cobre mais o intervalo.
+          const resolvido = await sprintService.resolveActiveSprint();
+          const sprint = resolvido.sprint;
+          origemSprint = resolvido.fonte;
+          online = resolvido.online;
+
+          if (sprint?.id) {
+            sprintAtual = {
+              id: sprint.id,
+              nome: sprint.nome,
+              data_inicio: sprint.data_inicio,
+              data_fim: sprint.data_fim,
+              status: sprint.status,
+            };
+          }
+
+          // 3.2 Demandas ativas já separadas pela sprint corrente.
+          try {
+            if (sprint?.id) {
+              demandasAtivas = await sprintService.getDemandasDaSprint(detected.id, sprint.id);
+              online = true;
+            } else {
+              demandasAtivas = await apiClient.listDemandas({
+                projeto_id: detected.id,
+                status: 'fazendo',
+              });
+              online = true;
+            }
+          } catch {
+            // Offline: sem demandas remotas, mas a sprint do cache é mantida.
+            online = false;
+          }
+        } catch {
+          // Falha não relacionada à rede (ex: autenticação): tenta a lista
+          // simples de demandas sem filtro de sprint.
+          try {
+            demandasAtivas = await apiClient.listDemandas({
+              projeto_id: detected.id,
+              status: 'fazendo',
+            });
+            online = true;
+          } catch {
+            online = false;
+          }
         }
       }
 
@@ -117,6 +159,7 @@ export function registerContextTools(
           origem_deteccao: detected.source,
         },
         sprint_atual: sprintAtual,
+        origem_sprint: origemSprint,
         demandas_ativas: demandasAtivas,
         offline_pendentes: offlinePending.map((p) => ({
           client_id: p.client_id,

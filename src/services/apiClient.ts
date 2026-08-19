@@ -129,14 +129,43 @@ function parseDemandPage(html: string): { demandas: Demanda[]; hasNextPage: bool
 
 function parseSprintPage(html: string): Sprint[] {
   const sprints: Sprint[] = [];
-  const pattern = /data-sprint-nome=["']([^"']+)["'][\s\S]*?data-show-url=["'][^"']*\/sprints\/(\d+)["']/gi;
-  let match: RegExpExecArray | null;
+  const rows = html.match(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi) || [];
 
-  while ((match = pattern.exec(html)) !== null) {
-    sprints.push({ id: Number(match[2]), nome: htmlText(match[1]) });
+  for (const row of rows) {
+    const showUrl = row.match(/data-show-url=["'][^"']*\/sprints\/(\d+)["']/i);
+    if (!showUrl) continue;
+
+    const nomeMatch = row.match(/data-sprint-nome=["']([^"']+)["']/i);
+    const inicioCell = extractCell(row, 'inicio');
+    const fimCell = extractCell(row, 'fim');
+    const statusCell = extractCell(row, 'status');
+    // O data-order da sprint fica na tag de abertura do <td>, fora do conteúdo
+    // capturado por extractCell — por isso o status é lido da própria tag.
+    const statusTag = row.match(/<td\b[^>]*data-col=["']status["'][^>]*>/i)?.[0] || '';
+    const statusOrder = statusTag.match(/data-order=["']([^"']+)["']/i);
+    // Fallback: a badge usa a classe status-{status}; ignora o status-badge.
+    const statusBadge = statusCell.match(/status-(?!badge)([a-z_]+)/i);
+
+    sprints.push({
+      id: Number(showUrl[1]),
+      nome: htmlText(nomeMatch?.[1] || ''),
+      data_inicio: parseSprintDate(htmlText(inicioCell)),
+      data_fim: parseSprintDate(htmlText(fimCell)),
+      status: statusOrder?.[1] || statusBadge?.[1] || undefined,
+    });
   }
 
   return sprints;
+}
+
+function parseSprintDate(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const text = value.trim();
+  const br = text.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  return undefined;
 }
 
 export class NetworkError extends Error {
@@ -494,12 +523,14 @@ export class ApiClient {
     projeto_id?: number;
     responsavel_id?: number;
     status?: string;
+    sprint_id?: number;
   }): Promise<Demanda[]> {
     try {
       const params = {
         projeto: filters?.projeto_id,
         responsavel: filters?.responsavel_id,
         status: filters?.status,
+        sprint: filters?.sprint_id,
       };
       const allDemandas: Demanda[] = [];
       let page = 1;

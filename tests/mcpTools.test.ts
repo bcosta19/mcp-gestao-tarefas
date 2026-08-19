@@ -6,6 +6,7 @@ import path from 'path';
 import os from 'os';
 import { createServer } from '../src/server.js';
 import { AppConfig } from '../src/config.js';
+import { registerContextTools } from '../src/tools/contextTools.js';
 
 describe('MCP Tools Full Specification & Behavior', () => {
   let server: http.Server;
@@ -22,7 +23,12 @@ describe('MCP Tools Full Specification & Behavior', () => {
       req.on('data', (c) => (body += c));
       req.on('end', () => {
         const parsedBody = body ? JSON.parse(body) : undefined;
-        mockRequests.push({ method: req.method || 'GET', url: url.pathname, body: parsedBody });
+        mockRequests.push({
+          method: req.method || 'GET',
+          url: url.pathname,
+          search: url.search,
+          body: parsedBody,
+        });
 
         // Route: GET /api/user
         if (req.method === 'GET' && (url.pathname === '/api/user' || url.pathname === '/user')) {
@@ -69,6 +75,35 @@ describe('MCP Tools Full Specification & Behavior', () => {
               },
             ])
           );
+          return;
+        }
+
+        // Route: GET /sprints
+        if (req.method === 'GET' && (url.pathname === '/sprints' || url.pathname === '/api/sprints')) {
+          const today = new Date();
+          const iso = (d: Date) => {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+          };
+          const past = new Date(today);
+          past.setDate(past.getDate() - 15);
+          const future = new Date(today);
+          future.setDate(future.getDate() + 15);
+          const br = (i: string) => {
+            const [y, m, d] = i.split('-');
+            return `${d}/${m}/${y}`;
+          };
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(`<table><tbody>
+            <tr>
+              <td data-col="inicio"><div class="sprint-date">${br(iso(past))}</div></td>
+              <td data-col="fim"><div class="sprint-date">${br(iso(future))}</div></td>
+              <td data-col="status" data-order="ativa"><span class="status-badge status-ativa">Ativa</span></td>
+              <td><button data-sprint-nome="Sprint 9.0" data-show-url="/sprints/28"></button></td>
+            </tr>
+          </tbody></table>`);
           return;
         }
 
@@ -193,6 +228,51 @@ describe('MCP Tools Full Specification & Behavior', () => {
     const activeDemands = await apiClient.listDemandas({ projeto_id: 1, status: 'fazendo' });
     expect(activeDemands).toHaveLength(1);
     expect(activeDemands[0].titulo).toBe('Integração Microsoft OAuth');
+    queue.close();
+  });
+
+  it('obter_contexto_projeto resolve a sprint ativa e separa as demandas pela sprint', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, '.gestaotarefas.json'),
+      JSON.stringify({
+        projeto_id: 1,
+        nome: 'Gestão de Tarefas',
+        departamento: 'TI',
+      })
+    );
+
+    const { apiClient, detector, queue, sprintService } = createServer(testConfig);
+    const handlers: Record<string, (params: any) => Promise<any>> = {};
+    const fakeServer = {
+      tool(
+        name: string,
+        _description: string,
+        _schema: unknown,
+        handler: (params: any) => Promise<any>
+      ) {
+        handlers[name] = handler;
+      },
+    };
+
+    registerContextTools(fakeServer, apiClient, detector, queue, sprintService);
+    const toolResult = await handlers.obter_contexto_projeto({
+      diretorio_path: tmpDir,
+    });
+    const data = JSON.parse(toolResult.content[0].text);
+
+    expect(data.mcp_ativo).toBe(true);
+    expect(data.sprint_atual).not.toBeNull();
+    expect(data.sprint_atual?.id).toBe(28);
+    expect(data.sprint_atual?.nome).toBe('Sprint 9.0');
+    expect(data.origem_sprint).toBe('api');
+    expect(data.demandas_ativas).toHaveLength(1);
+    expect(data.demandas_ativas[0].titulo).toBe('Integração Microsoft OAuth');
+
+    // A listagem de demandas foi filtrada pela sprint ativa (?sprint=28).
+    const demandasRequest = mockRequests.find(
+      (r) => r.method === 'GET' && r.url === '/demandas'
+    );
+    expect(demandasRequest?.search).toContain('sprint=28');
     queue.close();
   });
 

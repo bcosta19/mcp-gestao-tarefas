@@ -87,4 +87,43 @@ describe('OfflineQueue (SQLite)', () => {
     expect(retrieved?.payload.titulo).toBe('Demanda Persistida');
     newQueue.close();
   });
+
+  it('should persist the sprint cache and reload it across instances', () => {
+    queue.saveSprints([
+      { id: 27, nome: 'Sprint 8.0', data_inicio: '2026-08-01', data_fim: '2026-08-31', status: 'ativa' },
+      { id: 26, nome: 'Sprint 7.0', data_inicio: '2026-07-01', data_fim: '2026-07-31', status: 'concluida' },
+    ]);
+
+    expect(queue.getSprintCount()).toBe(2);
+    const sprints = queue.getSprints();
+    expect(sprints).toHaveLength(2);
+    // Ordenadas pela data fim mais recente primeiro.
+    expect(sprints[0].id).toBe(27);
+    expect(sprints[0].data_inicio).toBe('2026-08-01');
+    expect(sprints[0].data_fim).toBe('2026-08-31');
+    expect(sprints[0].status).toBe('ativa');
+    expect(sprints[0].fetched_at).toBeDefined();
+
+    // Persistência entre instâncias.
+    queue.close();
+    const newQueue = new OfflineQueue(dbPath);
+    expect(newQueue.getSprintCount()).toBe(2);
+    expect(newQueue.getSprints()[0].id).toBe(27);
+    newQueue.close();
+  });
+
+  it('should upsert sprints and clear the cache', () => {
+    queue.saveSprints([{ id: 27, nome: 'Sprint 8.0', data_inicio: '2026-08-01', data_fim: '2026-08-31' }]);
+    // Mesmo id: atualiza em vez de duplicar.
+    queue.saveSprints([{ id: 27, nome: 'Sprint 8.0 (replanejada)', data_inicio: '2026-08-05', data_fim: '2026-09-05', status: 'ativa' }]);
+    expect(queue.getSprintCount()).toBe(1);
+
+    const updated = queue.getSprints()[0];
+    expect(updated.nome).toBe('Sprint 8.0 (replanejada)');
+    expect(updated.data_inicio).toBe('2026-08-05');
+    expect(updated.data_fim).toBe('2026-09-05');
+
+    queue.clearSprints();
+    expect(queue.getSprintCount()).toBe(0);
+  });
 });
