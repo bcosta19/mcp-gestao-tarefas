@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ApiClient, NetworkError, ValidationError } from '../services/apiClient.js';
 import { OfflineQueue } from '../services/offlineQueue.js';
 import { ContextDetector } from '../services/contextDetector.js';
+import { SprintService } from '../services/sprintService.js';
 import {
   ClassificacaoItilEnum,
   ImpactoDemandaEnum,
@@ -44,7 +45,8 @@ export function registerDemandaTools(
   server: any,
   apiClient: ApiClient,
   queue: OfflineQueue,
-  detector?: ContextDetector
+  detector?: ContextDetector,
+  sprintService?: SprintService
 ) {
   server.tool(
     'criar_demanda',
@@ -84,6 +86,18 @@ export function registerDemandaTools(
         ...demandaParams,
         data_inicio: dataInicio,
       };
+
+      // 2. Injeta a sprint ativa quando o chamador não informou sprint_id
+      if (payload.sprint_id === undefined && sprintService) {
+        try {
+          const resolved = await sprintService.resolveActiveSprint();
+          if (resolved.sprint) {
+            payload.sprint_id = resolved.sprint.id;
+          }
+        } catch {
+          // Falha ao resolver a sprint não impede a criação da demanda.
+        }
+      }
 
       try {
         const result = await apiClient.createDemanda(payload);

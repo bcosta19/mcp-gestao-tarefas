@@ -34,7 +34,7 @@ export function createServer(config: AppConfig): ServerInstance {
 
   // Register all tools
   registerContextTools(server, apiClient, detector, queue, sprintService);
-  registerDemandaTools(server, apiClient, queue, detector);
+  registerDemandaTools(server, apiClient, queue, detector, sprintService);
   registerSubtarefaTools(server, apiClient, queue, detector);
   registerSyncTools(server, apiClient, queue, syncService);
   registerSprintTools(server, apiClient, queue);

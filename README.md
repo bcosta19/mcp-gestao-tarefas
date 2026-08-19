@@ -96,7 +96,7 @@ npm run build
 node dist/index.js
 ```
 
-Exemplo de configuração para um cliente MCP:
+Exemplo de configuração para clientes MCP baseados em JSON (Claude Desktop, Antigravity CLI, Cursor):
 
 ```json
 {
@@ -105,6 +105,41 @@ Exemplo de configuração para um cliente MCP:
       "command": "node",
       "args": ["/caminho/para/mcp-gestao-tarefas/dist/index.js"],
       "env": {
+        "GESTAO_TAREFAS_API_URL": "https://seu-servidor-de-gestao.exemplo",
+        "GESTAO_TAREFAS_API_TOKEN": "CONFIGURADO_LOCALMENTE",
+        "OFFLINE_QUEUE_PATH": "~/.gestao-tarefas-mcp/queue.sqlite",
+        "IGNORE_EXTERNAL_PROJECTS": "true"
+      }
+    }
+  }
+}
+```
+
+Exemplo para o **Codex** (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.gestao-tarefas]
+command = "node"
+args = ["/caminho/para/mcp-gestao-tarefas/dist/index.js"]
+cwd = "/caminho/para/mcp-gestao-tarefas"
+
+[mcp_servers.gestao-tarefas.env]
+GESTAO_TAREFAS_API_URL = "https://seu-servidor-de-gestao.exemplo"
+GESTAO_TAREFAS_API_TOKEN = "CONFIGURADO_LOCALMENTE"
+OFFLINE_QUEUE_PATH = "~/.gestao-tarefas-mcp/queue.sqlite"
+IGNORE_EXTERNAL_PROJECTS = "true"
+```
+
+Exemplo para o **OpenCode** (`~/.config/opencode/opencode.json`):
+
+```json
+{
+  "mcp": {
+    "gestao-tarefas": {
+      "type": "local",
+      "command": ["node", "/caminho/para/mcp-gestao-tarefas/dist/index.js"],
+      "enabled": true,
+      "environment": {
         "GESTAO_TAREFAS_API_URL": "https://seu-servidor-de-gestao.exemplo",
         "GESTAO_TAREFAS_API_TOKEN": "CONFIGURADO_LOCALMENTE",
         "OFFLINE_QUEUE_PATH": "~/.gestao-tarefas-mcp/queue.sqlite",

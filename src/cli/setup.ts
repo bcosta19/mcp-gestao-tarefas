@@ -143,51 +143,233 @@ async function performAutomatedLogin(
   return { authValue: combinedCookies };
 }
 
-function injectIntoMcpClients(scriptPath: string, apiUrl: string, token: string): string[] {
+export function updateCodexTomlContent(
+  content: string,
+  scriptPath: string,
+  projectCwd: string,
+  apiUrl: string,
+  token: string
+): string {
+  const newSectionLines = [
+    '[mcp_servers.gestao-tarefas]',
+    'command = "node"',
+    `args = [${JSON.stringify(scriptPath)}]`,
+    `cwd = ${JSON.stringify(projectCwd)}`,
+    '',
+    '[mcp_servers.gestao-tarefas.env]',
+    `GESTAO_TAREFAS_API_URL = ${JSON.stringify(apiUrl)}`,
+    `GESTAO_TAREFAS_API_TOKEN = ${JSON.stringify(token)}`,
+    'OFFLINE_QUEUE_PATH = "~/.gestao-tarefas-mcp/queue.sqlite"',
+    'IGNORE_EXTERNAL_PROJECTS = "true"',
+  ];
+  const newSection = newSectionLines.join('\n');
+
+  const lines = content.split(/\r?\n/);
+  let inTargetSection = false;
+  const beforeLines: string[] = [];
+  const afterLines: string[] = [];
+  let found = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isTargetHeader = /^\s*\[mcp_servers\.gestao-tarefas(\..*)?\]\s*$/.test(line);
+    const isOtherHeader = /^\s*\[(?!mcp_servers\.gestao-tarefas).+\]\s*$/.test(line);
+
+    if (isTargetHeader) {
+      inTargetSection = true;
+      found = true;
+      continue;
+    }
+
+    if (inTargetSection) {
+      if (isOtherHeader) {
+        inTargetSection = false;
+        afterLines.push(line);
+      }
+      continue;
+    }
+
+    if (found) {
+      afterLines.push(line);
+    } else {
+      beforeLines.push(line);
+    }
+  }
+
+  if (found) {
+    const beforeText = beforeLines.join('\n').trimEnd();
+    const afterText = afterLines.join('\n').trimStart();
+    const parts = [beforeText, newSection, afterText].filter((p) => p.length > 0);
+    return parts.join('\n\n') + '\n';
+  } else {
+    const trimmed = content.trimEnd();
+    return (trimmed ? trimmed + '\n\n' : '') + newSection + '\n';
+  }
+}
+
+export function injectIntoCodex(
+  configPath: string,
+  scriptPath: string,
+  apiUrl: string,
+  token: string,
+  projectCwd: string = process.cwd()
+): boolean {
+  try {
+    const dir = path.dirname(configPath);
+    if (!fs.existsSync(dir)) {
+      return false;
+    }
+
+    let content = '';
+    if (fs.existsSync(configPath)) {
+      content = fs.readFileSync(configPath, 'utf8');
+    }
+
+    const updatedContent = updateCodexTomlContent(content, scriptPath, projectCwd, apiUrl, token);
+    fs.writeFileSync(configPath, updatedContent, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function injectIntoOpenCode(
+  configPath: string,
+  scriptPath: string,
+  apiUrl: string,
+  token: string
+): boolean {
+  try {
+    const dir = path.dirname(configPath);
+    if (!fs.existsSync(dir)) {
+      return false;
+    }
+
+    let configObj: any = {};
+    if (fs.existsSync(configPath)) {
+      try {
+        configObj = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      } catch {
+        configObj = {};
+      }
+    }
+
+    if (!configObj || typeof configObj !== 'object') {
+      configObj = {};
+    }
+    if (!configObj.mcp || typeof configObj.mcp !== 'object') {
+      configObj.mcp = {};
+    }
+
+    configObj.mcp['gestao-tarefas'] = {
+      type: 'local',
+      command: ['node', scriptPath],
+      enabled: true,
+      environment: {
+        GESTAO_TAREFAS_API_URL: apiUrl,
+        GESTAO_TAREFAS_API_TOKEN: token,
+        OFFLINE_QUEUE_PATH: '~/.gestao-tarefas-mcp/queue.sqlite',
+        REQUEST_TIMEOUT_MS: '5000',
+        IGNORE_EXTERNAL_PROJECTS: 'true',
+        IGNORED_PROJECT_PATTERNS: 'pessoal,personal,externo',
+      },
+    };
+
+    fs.writeFileSync(configPath, JSON.stringify(configObj, null, 2) + '\n', 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function injectIntoStandardJsonMcpClients(
+  configPath: string,
+  scriptPath: string,
+  apiUrl: string,
+  token: string
+): boolean {
+  try {
+    const dir = path.dirname(configPath);
+    if (!fs.existsSync(dir)) {
+      return false;
+    }
+
+    let configObj: any = { mcpServers: {} };
+    if (fs.existsSync(configPath)) {
+      try {
+        configObj = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      } catch {
+        configObj = { mcpServers: {} };
+      }
+    }
+
+    if (!configObj || typeof configObj !== 'object') {
+      configObj = { mcpServers: {} };
+    }
+    if (!configObj.mcpServers || typeof configObj.mcpServers !== 'object') {
+      configObj.mcpServers = {};
+    }
+
+    configObj.mcpServers['gestao-tarefas'] = {
+      command: 'node',
+      args: [scriptPath],
+      env: {
+        GESTAO_TAREFAS_API_URL: apiUrl,
+        GESTAO_TAREFAS_API_TOKEN: token,
+        OFFLINE_QUEUE_PATH: '~/.gestao-tarefas-mcp/queue.sqlite',
+        IGNORE_EXTERNAL_PROJECTS: 'true',
+      },
+    };
+
+    fs.writeFileSync(configPath, JSON.stringify(configObj, null, 2) + '\n', 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function injectIntoMcpClients(
+  scriptPath: string,
+  apiUrl: string,
+  token: string,
+  projectCwd: string = process.cwd()
+): string[] {
   const updatedFiles: string[] = [];
   const homedir = os.homedir();
 
-  const targetConfigs = [
+  // 1. Clientes MCP JSON padrão (Gemini, Antigravity CLI, Claude Desktop, Cursor)
+  const standardConfigs = [
     path.join(homedir, '.gemini', 'config', 'mcp_config.json'),
     path.join(homedir, '.gemini', 'antigravity-cli', 'mcp_config.json'),
     path.join(homedir, '.config', 'Claude', 'claude_desktop_config.json'),
+    path.join(homedir, '.cursor', 'mcp.json'),
   ];
 
-  for (const cfgPath of targetConfigs) {
-    try {
-      const dir = path.dirname(cfgPath);
-      if (!fs.existsSync(dir)) {
-        continue;
-      }
-
-      let configObj: any = { mcpServers: {} };
-      if (fs.existsSync(cfgPath)) {
-        try {
-          configObj = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-        } catch {
-          configObj = { mcpServers: {} };
-        }
-      }
-
-      if (!configObj.mcpServers) {
-        configObj.mcpServers = {};
-      }
-
-      configObj.mcpServers['gestao-tarefas'] = {
-        command: 'node',
-        args: [scriptPath],
-        env: {
-          GESTAO_TAREFAS_API_URL: apiUrl,
-          GESTAO_TAREFAS_API_TOKEN: token,
-          OFFLINE_QUEUE_PATH: '~/.gestao-tarefas-mcp/queue.sqlite',
-          IGNORE_EXTERNAL_PROJECTS: 'true',
-        },
-      };
-
-      fs.writeFileSync(cfgPath, JSON.stringify(configObj, null, 2), 'utf8');
+  for (const cfgPath of standardConfigs) {
+    if (injectIntoStandardJsonMcpClients(cfgPath, scriptPath, apiUrl, token)) {
       updatedFiles.push(cfgPath);
-    } catch {
-      // ignore
+    }
+  }
+
+  // 2. OpenCode JSON
+  const opencodeConfigs = [
+    path.join(homedir, '.config', 'opencode', 'opencode.json'),
+    path.join(homedir, '.opencode', 'opencode.json'),
+  ];
+
+  for (const cfgPath of opencodeConfigs) {
+    if (injectIntoOpenCode(cfgPath, scriptPath, apiUrl, token)) {
+      updatedFiles.push(cfgPath);
+    }
+  }
+
+  // 3. Codex TOML (~/.codex/config.toml)
+  const codexDir = process.env.CODEX_HOME || path.join(homedir, '.codex');
+  const codexConfigs = [path.join(codexDir, 'config.toml')];
+
+  for (const cfgPath of codexConfigs) {
+    if (injectIntoCodex(cfgPath, scriptPath, apiUrl, token, projectCwd)) {
+      updatedFiles.push(cfgPath);
     }
   }
 
