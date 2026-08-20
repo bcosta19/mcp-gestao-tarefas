@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "postbuild": "node -e \"import('./dist/cli/setup.js').then(m => { const u = m.injectSkills(process.cwd()); if (u.length) console.log('🎯 Skills sincronizadas automaticamente:', u); })\"",
+    "skills:sync": "node -e \"import('./dist/cli/setup.js').then(m => { const u = m.injectSkills(process.cwd()); console.log('🎯 Skills sincronizadas em:', u); })\"",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "setup": "tsx src/cli/setup.ts",
