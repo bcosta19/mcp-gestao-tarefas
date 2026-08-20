@@ -1021,6 +1021,82 @@ export class ApiClient {
     }
   }
 
+  public async concluirSubtarefas(
+    subtarefaIds: number[],
+    status: string = 'concluida'
+  ): Promise<{
+    total: number;
+    sucesso: number[];
+    falhas: Array<{ id: number; erro: string }>;
+  }> {
+    const uniqueIds = [...new Set(subtarefaIds.filter((id) => typeof id === 'number' && !isNaN(id)))];
+    const sucesso: number[] = [];
+    const falhas: Array<{ id: number; erro: string }> = [];
+
+    // Executa as transições em paralelo
+    const results = await Promise.allSettled(
+      uniqueIds.map((id) => this.alterarStatusSubtarefa(id, status))
+    );
+
+    results.forEach((res, index) => {
+      const id = uniqueIds[index];
+      if (res.status === 'fulfilled') {
+        sucesso.push(id);
+      } else {
+        falhas.push({
+          id,
+          erro: res.reason?.message || 'Falha ao alterar status',
+        });
+      }
+    });
+
+    return {
+      total: uniqueIds.length,
+      sucesso,
+      falhas,
+    };
+  }
+
+  public async concluirSubtarefasDaDemanda(
+    demandaId: number,
+    status: string = 'concluida'
+  ): Promise<{
+    demanda_id: number;
+    total_encontradas: number;
+    total_atualizadas: number;
+    sucesso: number[];
+    falhas: Array<{ id: number; erro: string }>;
+  }> {
+    const detalhes = await this.getDemandaDetalhes(demandaId);
+    const subList = Array.isArray(detalhes?.subtarefas)
+      ? detalhes.subtarefas
+      : (detalhes as any)?.data?.subtarefas || [];
+
+    const pendentes = subList
+      .filter((s: any) => s.id && s.status !== status)
+      .map((s: any) => Number(s.id));
+
+    if (pendentes.length === 0) {
+      return {
+        demanda_id: demandaId,
+        total_encontradas: subList.length,
+        total_atualizadas: 0,
+        sucesso: [],
+        falhas: [],
+      };
+    }
+
+    const batchRes = await this.concluirSubtarefas(pendentes, status);
+
+    return {
+      demanda_id: demandaId,
+      total_encontradas: subList.length,
+      total_atualizadas: batchRes.sucesso.length,
+      sucesso: batchRes.sucesso,
+      falhas: batchRes.falhas,
+    };
+  }
+
   public async deleteSubtarefa(subtarefaId: number): Promise<any> {
     try {
       const response = await this.client.delete(

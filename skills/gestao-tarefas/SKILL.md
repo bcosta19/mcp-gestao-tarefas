@@ -42,12 +42,15 @@ Ao usar `criar_demanda` ou `atualizar_demanda`:
 
 ## 4. Padrões para Subtarefas
 
-Ao usar `criar_subtarefa` ou `atualizar_subtarefa`:
+Ao usar `criar_subtarefa`, `atualizar_subtarefa` ou `concluir_subtarefas`:
 
 - **Granularidade:** Cada subtarefa deve descrever um incremento técnico atômico e verificável.
 - **Ciclo de vida:**
   - Crie a subtarefa no início da atividade (`criar_subtarefa`).
-  - Ao concluir a implementação e os testes, marque como concluída com `atualizar_subtarefa` (`status: "concluida"`).
+  - Ao concluir as implementações, conclua as subtarefas em uma única chamada usando:
+    - `concluir_subtarefas(subtarefa_ids: [1609, 1610])` para concluir múltiplos IDs em lote;
+    - `concluir_subtarefas(demanda_id: 10065)` para concluir todas as subtarefas pendentes de uma demanda;
+    - Ou `atualizar_subtarefa(subtarefa_id: 1609, status: "concluida")` para atualizar uma única subtarefa.
 
 ## 5. Operação Offline e Resiliência
 

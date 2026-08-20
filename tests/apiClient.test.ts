@@ -146,6 +146,23 @@ describe('ApiClient (HTTP & Error Handling)', () => {
         return;
       }
 
+      // Route: GET /demandas/:id/detalhes
+      if (req.method === 'GET' && url.pathname.match(/\/demandas\/\d+\/detalhes/)) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            id: 101,
+            titulo: 'Demanda 101',
+            status: 'fazendo',
+            subtarefas: [
+              { id: 10, demanda_id: 101, titulo: 'Sub 1', status: 'pendente' },
+              { id: 11, demanda_id: 101, titulo: 'Sub 2', status: 'pendente' },
+            ],
+          })
+        );
+        return;
+      }
+
       // Route: POST /demandas/:id/subtarefas
       if (req.method === 'POST' && url.pathname.match(/\/demandas\/\d+\/subtarefas/)) {
         let body = '';
@@ -394,5 +411,24 @@ describe('ApiClient (HTTP & Error Handling)', () => {
 
     expect(cookies).toContain('renewed-session-123');
     expect(client.isSessionAuth()).toBe(true);
+  });
+
+  it('should conclude multiple subtasks in batch via concluirSubtarefas', async () => {
+    const client = new ApiClient(testConfig);
+    const result = await client.concluirSubtarefas([10, 11]);
+
+    expect(result.total).toBe(2);
+    expect(result.sucesso).toEqual([10, 11]);
+    expect(result.falhas).toHaveLength(0);
+  });
+
+  it('should conclude all pending subtasks of a demand via concluirSubtarefasDaDemanda', async () => {
+    const client = new ApiClient(testConfig);
+    const result = await client.concluirSubtarefasDaDemanda(101);
+
+    expect(result.demanda_id).toBe(101);
+    expect(result.total_encontradas).toBe(2);
+    expect(result.total_atualizadas).toBe(2);
+    expect(result.sucesso).toEqual([10, 11]);
   });
 });

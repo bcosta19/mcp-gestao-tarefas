@@ -526,4 +526,44 @@ describe('MCP Tools Full Specification & Behavior', () => {
     expect(parsed.usuario?.id).toBe(1);
     queue.close();
   });
+
+  it('concluir_subtarefas concludes multiple subtasks in batch in a single tool call', async () => {
+    const { apiClient, queue, detector } = createServer(testConfig);
+    const handlers: Record<string, (params: any) => Promise<any>> = {};
+    const fakeServer = {
+      tool(
+        name: string,
+        _description: string,
+        _schema: unknown,
+        handler: (params: any) => Promise<any>
+      ) {
+        handlers[name] = handler;
+      },
+    };
+
+    const { registerSubtarefaTools } = await import('../src/tools/subtarefaTools.js');
+    registerSubtarefaTools(fakeServer, apiClient, queue, detector);
+
+    // 1. Passando lista de IDs
+    const result = await handlers.concluir_subtarefas({
+      subtarefa_ids: [12, 13],
+      status: 'concluida',
+    });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.status).toBe('sucesso');
+    expect(parsed.total_concluidas).toBe(2);
+    expect(parsed.subtarefas_concluidas).toEqual([12, 13]);
+
+    // 2. Passando demanda_id
+    const resultDemanda = await handlers.concluir_subtarefas({
+      demanda_id: 104,
+      status: 'concluida',
+    });
+    const parsedDemanda = JSON.parse(resultDemanda.content[0].text);
+    expect(parsedDemanda.status).toBe('sucesso');
+    expect(parsedDemanda.total_atualizadas).toBeGreaterThanOrEqual(1);
+
+    queue.close();
+  });
 });

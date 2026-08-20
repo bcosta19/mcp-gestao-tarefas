@@ -19,11 +19,34 @@ export const CriarSubtarefaSchema = {
 };
 
 export const AtualizarSubtarefaSchema = {
-  subtarefa_id: z.number().describe('ID da subtarefa a ser atualizada.'),
+  subtarefa_id: z
+    .union([z.number(), z.array(z.number())])
+    .optional()
+    .describe('ID numérico da subtarefa ou lista de IDs a atualizar.'),
+  subtarefa_ids: z
+    .array(z.number())
+    .optional()
+    .describe('Lista de IDs de subtarefas a serem atualizadas em lote.'),
   titulo: z.string().optional().describe('Novo título da subtarefa.'),
   descricao: z.string().optional().describe('Nova descrição da subtarefa.'),
   status: z.enum(['pendente', 'fazendo', 'concluida', 'cancelada']).optional().describe('Novo status da subtarefa.'),
   data_limite: z.string().optional().describe('Nova data limite YYYY-MM-DD.'),
+};
+
+export const ConcluirSubtarefasSchema = {
+  subtarefa_ids: z
+    .array(z.number())
+    .optional()
+    .describe('Lista com os IDs numéricos das subtarefas a serem concluídas.'),
+  demanda_id: z
+    .number()
+    .optional()
+    .describe('ID da demanda para concluir todas as subtarefas pendentes vinculadas a ela de uma vez.'),
+  status: z
+    .enum(['concluida', 'fazendo', 'pendente', 'cancelada'])
+    .optional()
+    .default('concluida')
+    .describe('Status para o qual as subtarefas serão alteradas (default: concluida).'),
 };
 
 export function registerSubtarefaTools(
@@ -188,21 +211,93 @@ export function registerSubtarefaTools(
 
   server.tool(
     'atualizar_subtarefa',
-    'Atualiza campos de uma subtarefa (título, descrição, status ou data limite).',
+    'Atualiza campos de uma subtarefa (título, descrição, status ou data limite) ou atualiza múltiplos IDs em lote.',
     AtualizarSubtarefaSchema,
-    async ({ subtarefa_id, ...data }: { subtarefa_id: number; [key: string]: any }) => {
+    async ({
+      subtarefa_id,
+      subtarefa_ids,
+      ...data
+    }: {
+      subtarefa_id?: number | number[];
+      subtarefa_ids?: number[];
+      [key: string]: any;
+    }) => {
       try {
-        const result = await apiClient.updateSubtarefa(subtarefa_id, data);
+        const rawIds = subtarefa_ids || (Array.isArray(subtarefa_id) ? subtarefa_id : [subtarefa_id]);
+        const ids = rawIds.filter((id): id is number => typeof id === 'number' && !isNaN(id));
+
+        if (ids.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: 'erro_validacao',
+                    mensagem: 'Informe ao menos um subtarefa_id válido para atualizar.',
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+
+        if (ids.length === 1) {
+          const singleId = ids[0];
+          const result = await apiClient.updateSubtarefa(singleId, data);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: 'sucesso',
+                    subtarefa_id: singleId,
+                    mensagem: result?.message || 'Subtarefa atualizada com sucesso.',
+                    subtarefa: result?.data ? formatSubtarefaItem(result.data) : undefined,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+
+        // Múltiplos IDs em lote
+        const results = await Promise.allSettled(
+          ids.map((id) => apiClient.updateSubtarefa(id, data))
+        );
+
+        const sucesso: number[] = [];
+        const falhas: Array<{ id: number; erro: string }> = [];
+
+        results.forEach((res, index) => {
+          const id = ids[index];
+          if (res.status === 'fulfilled') {
+            sucesso.push(id);
+          } else {
+            falhas.push({
+              id,
+              erro: res.reason?.message || 'Falha ao atualizar subtarefa',
+            });
+          }
+        });
+
         return {
           content: [
             {
               type: 'text',
               text: JSON.stringify(
                 {
-                  status: 'sucesso',
-                  subtarefa_id,
-                  mensagem: result?.message || 'Subtarefa atualizada com sucesso.',
-                  subtarefa: result?.data ? formatSubtarefaItem(result.data) : undefined,
+                  status: falhas.length === 0 ? 'sucesso' : 'parcial',
+                  total_solicitadas: ids.length,
+                  total_atualizadas: sucesso.length,
+                  subtarefas_atualizadas: sucesso,
+                  falhas,
+                  mensagem: `Atualizadas ${sucesso.length} de ${ids.length} subtarefas com sucesso.`,
                 },
                 null,
                 2
@@ -219,6 +314,106 @@ export function registerSubtarefaTools(
                 {
                   status: 'erro',
                   mensagem: `Não foi possível atualizar a subtarefa: ${err.message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+    }
+  );
+
+  server.tool(
+    'concluir_subtarefas',
+    'Conclui ou altera o status de múltiplas subtarefas em uma única operação (passando uma lista de subtarefa_ids ou o demanda_id para concluir todas as pendentes daquela demanda).',
+    ConcluirSubtarefasSchema,
+    async ({
+      subtarefa_ids,
+      demanda_id,
+      status = 'concluida',
+    }: {
+      subtarefa_ids?: number[];
+      demanda_id?: number;
+      status?: string;
+    }) => {
+      try {
+        if (!subtarefa_ids?.length && !demanda_id) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: 'erro_validacao',
+                    mensagem:
+                      'Informe ao menos subtarefa_ids (lista de IDs) ou demanda_id para concluir as subtarefas em lote.',
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+
+        if (demanda_id && !subtarefa_ids?.length) {
+          const result = await apiClient.concluirSubtarefasDaDemanda(demanda_id, status);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: result.falhas.length === 0 ? 'sucesso' : 'parcial',
+                    demanda_id,
+                    novo_status: status,
+                    mensagem: `Foram atualizadas ${result.total_atualizadas} subtarefas da demanda ${demanda_id} para o status '${status}'.`,
+                    total_solicitadas: result.total_encontradas,
+                    total_atualizadas: result.total_atualizadas,
+                    subtarefas_concluidas: result.sucesso,
+                    falhas: result.falhas,
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+
+        const ids = subtarefa_ids || [];
+        const result = await apiClient.concluirSubtarefas(ids, status);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  status: result.falhas.length === 0 ? 'sucesso' : 'parcial',
+                  novo_status: status,
+                  total_solicitadas: result.total,
+                  total_concluidas: result.sucesso.length,
+                  mensagem: `Atualizadas com sucesso ${result.sucesso.length} de ${result.total} subtarefas para o status '${status}'.`,
+                  subtarefas_concluidas: result.sucesso,
+                  falhas: result.falhas,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  status: 'erro',
+                  mensagem: `Falha ao concluir subtarefas em lote: ${err.message}`,
                 },
                 null,
                 2
