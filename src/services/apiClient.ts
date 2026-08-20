@@ -944,6 +944,25 @@ export class ApiClient {
     }
   }
 
+  public async alterarStatusSubtarefa(subtarefaId: number, status: string): Promise<any> {
+    try {
+      const payload: any = { status };
+      const token =
+        (await this.fetchCsrfToken(`/subtarefas/${subtarefaId}/edit`)) ||
+        (await this.fetchCsrfToken('/demandas'));
+      if (token) {
+        payload._token = token;
+      }
+      const response = await this.client.post(
+        this.resolveUrl(`/subtarefas/${subtarefaId}/alterar-status`),
+        payload
+      );
+      return response.data;
+    } catch (err) {
+      this.handleError(err, `alterar status da subtarefa ${subtarefaId}`);
+    }
+  }
+
   public async updateSubtarefa(
     subtarefaId: number,
     data: {
@@ -954,11 +973,49 @@ export class ApiClient {
     }
   ): Promise<any> {
     try {
-      const response = await this.client.put(
-        this.resolveUrl(`/subtarefas/${subtarefaId}`),
-        data
-      );
-      return response.data;
+      let updateResult: any = null;
+      let statusResult: any = null;
+
+      const hasFieldUpdates =
+        data.titulo !== undefined ||
+        data.descricao !== undefined ||
+        data.data_limite !== undefined;
+
+      if (hasFieldUpdates) {
+        const updatePayload: any = {};
+        if (data.titulo !== undefined) updatePayload.titulo = data.titulo;
+        if (data.descricao !== undefined) updatePayload.descricao = data.descricao;
+        if (data.data_limite !== undefined) updatePayload.data_limite = data.data_limite;
+
+        const token =
+          (await this.fetchCsrfToken(`/subtarefas/${subtarefaId}/edit`)) ||
+          (await this.fetchCsrfToken('/demandas'));
+        if (token) {
+          updatePayload._token = token;
+        }
+
+        const response = await this.client.put(
+          this.resolveUrl(`/subtarefas/${subtarefaId}`),
+          updatePayload
+        );
+        updateResult = response.data;
+      }
+
+      if (data.status !== undefined) {
+        statusResult = await this.alterarStatusSubtarefa(subtarefaId, data.status);
+      }
+
+      return {
+        success: true,
+        message: statusResult?.message || updateResult?.message || 'Subtarefa atualizada com sucesso.',
+        data: {
+          id: subtarefaId,
+          ...data,
+          ...(updateResult?.subtarefa || updateResult?.data || {}),
+          ...(statusResult?.subtarefa || statusResult?.data || {}),
+          ...(data.status ? { status: data.status } : {}),
+        },
+      };
     } catch (err) {
       this.handleError(err, `atualizar subtarefa ${subtarefaId}`);
     }

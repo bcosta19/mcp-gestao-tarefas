@@ -180,6 +180,19 @@ describe('MCP Tools Full Specification & Behavior', () => {
           return;
         }
 
+        // Route: POST /subtarefas/:id/alterar-status
+        if (req.method === 'POST' && url.pathname.match(/\/subtarefas\/\d+\/alterar-status/)) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              success: true,
+              message: 'Status alterado com sucesso',
+              status: parsedBody?.status || 'concluida',
+            })
+          );
+          return;
+        }
+
         // Route: PUT /subtarefas/:id
         if (req.method === 'PUT' && url.pathname.match(/\/subtarefas\/\d+/)) {
           res.writeHead(200, { 'Content-Type': 'application/json' });

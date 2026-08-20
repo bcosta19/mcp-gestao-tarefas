@@ -169,6 +169,39 @@ describe('ApiClient (HTTP & Error Handling)', () => {
         return;
       }
 
+      // Route: POST /subtarefas/:id/alterar-status
+      if (req.method === 'POST' && url.pathname.match(/\/subtarefas\/\d+\/alterar-status/)) {
+        let body = '';
+        req.on('data', (c) => (body += c));
+        req.on('end', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              success: true,
+              message: 'Status alterado com sucesso',
+              status: 'concluida',
+            })
+          );
+        });
+        return;
+      }
+
+      // Route: PUT /subtarefas/:id
+      if (req.method === 'PUT' && url.pathname.match(/\/subtarefas\/\d+/)) {
+        let body = '';
+        req.on('data', (c) => (body += c));
+        req.on('end', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              success: true,
+              message: 'Subtarefa atualizada com sucesso',
+            })
+          );
+        });
+        return;
+      }
+
       // Default 404
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ message: 'Not found' }));
