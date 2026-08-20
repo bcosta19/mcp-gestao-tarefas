@@ -23,7 +23,7 @@ function resolvePath(p: string): string {
   return path.resolve(p);
 }
 
-function loadGlobalUserConfig(): { apiUrl?: string; apiToken?: string } {
+function loadGlobalUserConfig(): { apiUrl?: string; apiToken?: string; email?: string; password?: string } {
   try {
     const configFilePath = path.join(os.homedir(), '.gestao-tarefas-mcp', 'config.json');
     if (fs.existsSync(configFilePath)) {
@@ -63,8 +63,8 @@ export function loadConfig(overrides?: Partial<AppConfig>): AppConfig {
       process.env.GESTAO_TAREFAS_API_TOKEN ||
       globalUserCfg.apiToken ||
       '',
-    email: overrides?.email || process.env.GESTAO_TAREFAS_EMAIL || '',
-    password: overrides?.password || process.env.GESTAO_TAREFAS_PASSWORD || '',
+    email: overrides?.email || process.env.GESTAO_TAREFAS_EMAIL || globalUserCfg.email || '',
+    password: overrides?.password || process.env.GESTAO_TAREFAS_PASSWORD || globalUserCfg.password || '',
     offlineQueuePath: resolvePath(rawQueuePath),
     requestTimeoutMs: overrides?.requestTimeoutMs || Number(process.env.REQUEST_TIMEOUT_MS) || 5000,
     ignorePrefeitura:

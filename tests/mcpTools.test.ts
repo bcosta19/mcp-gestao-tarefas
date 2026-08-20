@@ -22,7 +22,12 @@ describe('MCP Tools Full Specification & Behavior', () => {
 
       req.on('data', (c) => (body += c));
       req.on('end', () => {
-        const parsedBody = body ? JSON.parse(body) : undefined;
+        let parsedBody;
+        try {
+          parsedBody = body ? JSON.parse(body) : undefined;
+        } catch {
+          parsedBody = body;
+        }
         mockRequests.push({
           method: req.method || 'GET',
           url: url.pathname,
@@ -30,12 +35,18 @@ describe('MCP Tools Full Specification & Behavior', () => {
           body: parsedBody,
         });
 
-        // Route: GET /api/user
-        if (req.method === 'GET' && (url.pathname === '/api/user' || url.pathname === '/user')) {
+        // Route: GET /api/user or /session/check
+        if (
+          req.method === 'GET' &&
+          (url.pathname === '/api/user' ||
+            url.pathname === '/user' ||
+            url.pathname === '/session/check')
+        ) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
               id: 1,
+              user_id: 1,
               name: 'Fulano da Silva',
               email: 'fulano@empresa.gov.br',
               cpf: '000.000.000-00',
@@ -199,6 +210,26 @@ describe('MCP Tools Full Specification & Behavior', () => {
               message: 'Demanda atualizada com sucesso',
             })
           );
+          return;
+        }
+
+        // Route: GET /login
+        if (req.method === 'GET' && url.pathname === '/login') {
+          res.writeHead(200, {
+            'Content-Type': 'text/html',
+            'Set-Cookie': ['XSRF-TOKEN=initial-xsrf; Path=/', 'gestao_de_tarefas_session=initial-sess; Path=/'],
+          });
+          res.end('<form><input type="hidden" name="_token" value="csrf-token-123"></form>');
+          return;
+        }
+
+        // Route: POST /login
+        if (req.method === 'POST' && url.pathname === '/login') {
+          res.writeHead(302, {
+            Location: '/home',
+            'Set-Cookie': ['XSRF-TOKEN=renewed-xsrf; Path=/', 'gestao_de_tarefas_session=renewed-sess; Path=/'],
+          });
+          res.end();
           return;
         }
 
@@ -451,6 +482,35 @@ describe('MCP Tools Full Specification & Behavior', () => {
     expect(updateRequest?.body?.descricao).toBe(
       '<p>Linha 1</p><p>Linha 2 com &amp; e &lt;&gt;</p>'
     );
+    queue.close();
+  });
+
+  it('renovar_sessao refreshes session using provided or saved credentials', async () => {
+    const { apiClient, queue, syncService } = createServer(testConfig);
+    const handlers: Record<string, (params: any) => Promise<any>> = {};
+    const fakeServer = {
+      tool(
+        name: string,
+        _description: string,
+        _schema: unknown,
+        handler: (params: any) => Promise<any>
+      ) {
+        handlers[name] = handler;
+      },
+    };
+
+    const { registerSyncTools } = await import('../src/tools/syncTools.js');
+    registerSyncTools(fakeServer, apiClient, queue, syncService);
+
+    const result = await handlers.renovar_sessao({
+      email: 'fulano@empresa.gov.br',
+      password: 'mypassword',
+    });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.status).toBe('sucesso');
+    expect(parsed.autenticado).toBe(true);
+    expect(parsed.usuario?.id).toBe(1);
     queue.close();
   });
 });

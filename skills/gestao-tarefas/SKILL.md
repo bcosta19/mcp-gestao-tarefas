@@ -53,4 +53,10 @@ Ao usar `criar_subtarefa` ou `atualizar_subtarefa`:
 
 - Se a intranet da Prefeitura / servidor estiver inacessível, as ferramentas registrarão as operações na fila offline local automaticamente (`~/.gestao-tarefas-mcp/queue.sqlite`).
 - Nunca tente reexecutar a mesma chamada em loop caso haja erro de rede. O MCP gerencia o armazenamento local seguro.
-- Quando a conectividade for restabelecida, execute `sincronizar_fila_offline` para enviar as requisições pendentes.
+- Quando a conectividade for restabelecida, execute `sincronizar_fila_offline` para enviar as requicições pendentes.
+
+## 6. Autenticação e Renovação Automática de Sessão
+
+- O MCP renova sessões web e tokens automaticamente de forma transparente quando as credenciais estiverem salvas.
+- Caso receba erro de autenticação persistente ou se o usuário informar novas credenciais, utilize a ferramenta `renovar_sessao` com `email` e `password`.
+

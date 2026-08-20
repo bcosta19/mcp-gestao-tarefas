@@ -1,4 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import {
   Colaborador,
   Demanda,
@@ -230,6 +233,7 @@ export class ApiClient {
 
   private email?: string;
   private password?: string;
+  private refreshPromise: Promise<string> | null = null;
 
   constructor(config: AppConfig) {
     // A aplicação Laravel expõe as operações do MCP nas rotas web raiz.
@@ -269,15 +273,140 @@ export class ApiClient {
       headers,
     });
 
-    this.client.interceptors.response.use((response) => {
-      if (this.authMode === 'session') {
-        const setCookies = response.headers['set-cookie'];
-        if (Array.isArray(setCookies) && setCookies.length > 0) {
-          this.updateSessionCookies(setCookies);
+    this.client.interceptors.response.use(
+      (response) => {
+        if (this.authMode === 'session') {
+          const setCookies = response.headers['set-cookie'];
+          if (Array.isArray(setCookies) && setCookies.length > 0) {
+            this.updateSessionCookies(setCookies);
+          }
         }
+
+        // Se uma requisição retornou o formulário de login (redirect HTML), trata como expiração
+        if (
+          typeof response.data === 'string' &&
+          response.data.includes('name="password"') &&
+          response.data.includes('name="_token"') &&
+          !response.config.url?.includes('/login') &&
+          this.hasCredentials() &&
+          !(response.config as any)._retry
+        ) {
+          (response.config as any)._retry = true;
+          return this.refreshTokenOrSession().then((newCookies) => {
+            response.config.headers['Cookie'] = newCookies;
+            const xsrf = getXsrfToken(newCookies);
+            if (xsrf) {
+              response.config.headers['X-XSRF-TOKEN'] = xsrf;
+            }
+            return this.client(response.config);
+          });
+        }
+
+        return response;
+      },
+      async (error) => {
+        const originalRequest = error.config;
+        if (!originalRequest || originalRequest._retry) {
+          return Promise.reject(error);
+        }
+
+        const status = error.response?.status;
+        const isAuthFailure = status === 401 || status === 419;
+
+        if (isAuthFailure && this.hasCredentials()) {
+          originalRequest._retry = true;
+          try {
+            const newAuth = await this.refreshTokenOrSession();
+
+            if (this.authMode === 'session') {
+              originalRequest.headers['Cookie'] = newAuth;
+              const xsrfToken = getXsrfToken(newAuth);
+              if (xsrfToken) {
+                originalRequest.headers['X-XSRF-TOKEN'] = xsrfToken;
+              }
+            } else {
+              originalRequest.headers['Authorization'] = `Bearer ${newAuth}`;
+            }
+
+            return this.client(originalRequest);
+          } catch {
+            return Promise.reject(error);
+          }
+        }
+
+        return Promise.reject(error);
       }
-      return response;
-    });
+    );
+  }
+
+  public hasCredentials(): boolean {
+    return Boolean(this.email && this.password);
+  }
+
+  public isSessionAuth(): boolean {
+    return this.authMode === 'session';
+  }
+
+  public async refreshTokenOrSession(email?: string, password?: string): Promise<string> {
+    const userEmail = email || this.email;
+    const userPassword = password || this.password;
+
+    if (!userEmail || !userPassword) {
+      throw new Error('E-mail e senha não configurados para renovação automática de sessão.');
+    }
+
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = (async () => {
+      try {
+        const authValue = await this.login(userEmail, userPassword);
+        return authValue;
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
+  }
+
+  private persistSessionToken(tokenOrCookie: string): void {
+    try {
+      const userConfigDir = path.join(os.homedir(), '.gestao-tarefas-mcp');
+      const configFilePath = path.join(userConfigDir, 'config.json');
+      let existing: any = {};
+      if (fs.existsSync(configFilePath)) {
+        try {
+          existing = JSON.parse(fs.readFileSync(configFilePath, 'utf8'));
+        } catch {}
+      }
+      existing.apiUrl = this.baseUrl;
+      existing.apiToken = tokenOrCookie;
+      if (this.email) existing.email = this.email;
+      if (this.password) existing.password = this.password;
+      existing.updatedAt = new Date().toISOString();
+      if (!fs.existsSync(userConfigDir)) {
+        fs.mkdirSync(userConfigDir, { recursive: true });
+      }
+      fs.writeFileSync(configFilePath, JSON.stringify(existing, null, 2), 'utf8');
+    } catch {}
+
+    try {
+      const envPath = path.resolve(process.cwd(), '.env');
+      if (fs.existsSync(envPath)) {
+        let envContent = fs.readFileSync(envPath, 'utf8');
+        const updateEnvKey = (content: string, key: string, value: string): string => {
+          const regex = new RegExp(`^${key}=.*$`, 'm');
+          if (regex.test(content)) {
+            return content.replace(regex, `${key}=${value}`);
+          }
+          return `${content}\n${key}=${value}`.trim() + '\n';
+        };
+        envContent = updateEnvKey(envContent, 'GESTAO_TAREFAS_API_TOKEN', tokenOrCookie);
+        fs.writeFileSync(envPath, envContent, 'utf8');
+      }
+    } catch {}
   }
 
   private currentSessionCookies(): string {
@@ -329,7 +458,7 @@ export class ApiClient {
 
   /**
    * Efetua login no formulário web existente e guarda a sessão Laravel.
-   * A aplicação atual não possui endpoint público de login Sanctum.
+   * Suporta autenticação automática via API ou Web Session.
    */
   public async login(email?: string, password?: string): Promise<string> {
     const userEmail = email || this.email;
@@ -339,10 +468,46 @@ export class ApiClient {
       throw new Error('E-mail e senha são necessários para autenticar no Gestão de Tarefas.');
     }
 
-    const webBaseUrl = this.baseUrl.replace(/\/api\/?$/, '');
+    if (email) this.email = email;
+    if (password) this.password = password;
 
-    // 1. GET /login para extrair CSRF token e cookies iniciais
-    const loginPage = await axios.get(`${webBaseUrl}/login`, {
+    const baseUrl = this.baseUrl.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+
+    // 1. Tenta login direto via JSON API caso exista endpoint de token
+    const apiEndpoints = [
+      `${baseUrl}/api/login`,
+      `${baseUrl}/login/api`,
+      `${baseUrl}/api/tokens/create`,
+      `${baseUrl}/sanctum/token`,
+    ];
+
+    for (const endpoint of apiEndpoints) {
+      try {
+        const response = await axios.post(
+          endpoint,
+          { email: userEmail, password: userPassword, device_name: 'mcp-agent' },
+          {
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+            timeout: 7000,
+          }
+        );
+        const data = response.data;
+        const token = data?.token || data?.access_token || data?.plainTextToken;
+        if (token && typeof token === 'string') {
+          this.authMode = 'bearer';
+          this.client.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          delete (this.client.defaults.headers as any).common?.['Cookie'];
+          delete (this.client.defaults.headers as any).common?.['X-XSRF-TOKEN'];
+          this.persistSessionToken(token);
+          return token;
+        }
+      } catch {
+        // continua para web login
+      }
+    }
+
+    // 2. Web Form Login com CSRF
+    const loginPage = await axios.get(`${baseUrl}/login`, {
       headers: {
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'User-Agent':
@@ -368,11 +533,11 @@ export class ApiClient {
     params.append('email', userEmail);
     params.append('password', userPassword);
 
-    const loginRes = await axios.post(`${webBaseUrl}/login`, params.toString(), {
+    const loginRes = await axios.post(`${baseUrl}/login`, params.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Cookie: cookieHeader,
-        Referer: `${webBaseUrl}/login`,
+        Referer: `${baseUrl}/login`,
       },
       maxRedirects: 0,
       validateStatus: (s) => s >= 200 && s < 400,
@@ -391,6 +556,7 @@ export class ApiClient {
     }
 
     this.setSessionCookie(combinedCookies);
+    this.persistSessionToken(combinedCookies);
 
     return combinedCookies;
   }
@@ -486,9 +652,9 @@ export class ApiClient {
         user:
           this.authMode === 'session'
             ? {
-                id: Number(authData?.user_id),
-                name: 'Usuário autenticado',
-                email: '',
+                id: Number(authData?.user_id || authData?.id || 1),
+                name: authData?.name || 'Usuário autenticado',
+                email: authData?.email || '',
               }
             : authData,
       };
@@ -514,9 +680,9 @@ export class ApiClient {
       const authData = await this.requestAuthenticatedUser();
       if (this.authMode === 'session') {
         return {
-          id: Number(authData?.user_id),
-          name: 'Usuário autenticado',
-          email: '',
+          id: Number(authData?.user_id || authData?.id || 1),
+          name: authData?.name || 'Usuário autenticado',
+          email: authData?.email || '',
         };
       }
       return authData;

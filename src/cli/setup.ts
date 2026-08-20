@@ -587,6 +587,12 @@ export async function runSetup() {
 
   envContent = updateEnvKey(envContent, 'GESTAO_TAREFAS_API_URL', apiUrl);
   envContent = updateEnvKey(envContent, 'GESTAO_TAREFAS_API_TOKEN', token);
+  if (email) {
+    envContent = updateEnvKey(envContent, 'GESTAO_TAREFAS_EMAIL', email);
+  }
+  if (password) {
+    envContent = updateEnvKey(envContent, 'GESTAO_TAREFAS_PASSWORD', password);
+  }
   envContent = updateEnvKey(envContent, 'OFFLINE_QUEUE_PATH', '~/.gestao-tarefas-mcp/queue.sqlite');
   envContent = updateEnvKey(envContent, 'IGNORE_EXTERNAL_PROJECTS', 'true');
 
@@ -599,7 +605,17 @@ export async function runSetup() {
   }
   fs.writeFileSync(
     path.join(userConfigDir, 'config.json'),
-    JSON.stringify({ apiUrl, apiToken: token, updatedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify(
+      {
+        apiUrl,
+        apiToken: token,
+        email: email || undefined,
+        password: password || undefined,
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2
+    ),
     'utf8'
   );
 

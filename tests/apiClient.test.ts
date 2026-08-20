@@ -19,9 +19,52 @@ describe('ApiClient (HTTP & Error Handling)', () => {
       const url = new URL(req.url || '', `http://${req.headers.host}`);
       const authHeader = req.headers['authorization'];
 
+      // Route: GET /login
+      if (req.method === 'GET' && url.pathname === '/login') {
+        res.writeHead(200, {
+          'Content-Type': 'text/html',
+          'Set-Cookie': ['XSRF-TOKEN=initial-xsrf; Path=/', 'gestao_de_tarefas_session=initial-sess; Path=/'],
+        });
+        res.end('<form><input type="hidden" name="_token" value="mock-csrf-token-123"></form>');
+        return;
+      }
+
+      // Route: POST /login
+      if (req.method === 'POST' && url.pathname === '/login') {
+        let body = '';
+        req.on('data', (c) => (body += c));
+        req.on('end', () => {
+          if (body.includes('password=wrong')) {
+            res.writeHead(302, { Location: '/login' });
+            res.end();
+            return;
+          }
+          res.writeHead(302, {
+            Location: '/home',
+            'Set-Cookie': ['XSRF-TOKEN=renewed-xsrf; Path=/', 'gestao_de_tarefas_session=renewed-session-123; Path=/'],
+          });
+          res.end();
+        });
+        return;
+      }
+
+      // Route: GET /session/check
+      if (req.method === 'GET' && url.pathname === '/session/check') {
+        const cookie = req.headers['cookie'] || '';
+        if (cookie.includes('gestao_de_tarefas_session=renewed-session-123') || cookie.includes('valid-session')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ authenticated: true, user_id: 1 }));
+        } else {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ message: 'Unauthenticated.' }));
+        }
+        return;
+      }
+
       // Route: GET /api/user
       if (req.method === 'GET' && (url.pathname === '/api/user' || url.pathname === '/user')) {
-        if (authHeader === 'Bearer valid-token') {
+        const cookie = req.headers['cookie'] || '';
+        if (authHeader === 'Bearer valid-token' || cookie.includes('gestao_de_tarefas_session=renewed-session-123')) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(
             JSON.stringify({
@@ -297,5 +340,26 @@ describe('ApiClient (HTTP & Error Handling)', () => {
         prioridade: 'Alta',
       })
     ).rejects.toThrow(NetworkError);
+  });
+
+  it('should automatically renew session and succeed request when initial token is expired but credentials are provided', async () => {
+    const renewingClient = new ApiClient({
+      ...testConfig,
+      apiToken: 'expired-token-123',
+      email: 'fulano@empresa.gov.br',
+      password: 'secretpassword',
+    });
+
+    const conn = await renewingClient.checkConnection();
+    expect(conn.connected).toBe(true);
+    expect(conn.user?.id).toBe(1);
+  });
+
+  it('should perform explicit login and update session cookies and headers', async () => {
+    const client = new ApiClient(testConfig);
+    const cookies = await client.login('fulano@empresa.gov.br', 'secretpassword');
+
+    expect(cookies).toContain('renewed-session-123');
+    expect(client.isSessionAuth()).toBe(true);
   });
 });

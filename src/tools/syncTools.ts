@@ -1,6 +1,12 @@
+import { z } from 'zod';
 import { ApiClient } from '../services/apiClient.js';
 import { OfflineQueue } from '../services/offlineQueue.js';
 import { SyncService } from '../services/syncService.js';
+
+export const RenovarSessaoSchema = {
+  email: z.string().optional().describe('E-mail de login (opcional se já configurado localmente).'),
+  password: z.string().optional().describe('Senha de login (opcional se já configurada localmente).'),
+};
 
 export function registerSyncTools(
   server: any,
@@ -8,6 +14,51 @@ export function registerSyncTools(
   queue: OfflineQueue,
   syncService: SyncService
 ) {
+  server.tool(
+    'renovar_sessao',
+    'Renova a sessão de autenticação do Gestão de Tarefas utilizando as credenciais salvas ou novas credenciais informadas.',
+    RenovarSessaoSchema,
+    async ({ email, password }: { email?: string; password?: string }) => {
+      try {
+        await apiClient.login(email, password);
+        const user = await apiClient.getUser().catch(() => null);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  status: 'sucesso',
+                  mensagem: 'Sessão renovada com sucesso. As credenciais e a sessão foram atualizadas e persistidas.',
+                  autenticado: true,
+                  usuario: user,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  status: 'erro',
+                  mensagem: `Não foi possível renovar a sessão: ${err.message}`,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+    }
+  );
+
   server.tool(
     'sincronizar_fila_offline',
     'Força o envio de todas as demandas e subtarefas que foram geradas localmente enquanto desconectado da VPN/intranet.',
