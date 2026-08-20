@@ -3,6 +3,7 @@ import { ApiClient } from '../services/apiClient.js';
 import { ContextDetector } from '../services/contextDetector.js';
 import { OfflineQueue } from '../services/offlineQueue.js';
 import { SprintService } from '../services/sprintService.js';
+import { formatDemandaResumo, formatProjetoItem } from '../services/responseFormatter.js';
 
 export const ObterContextoProjetoSchema = {
   diretorio_path: z
@@ -160,7 +161,8 @@ export function registerContextTools(
         },
         sprint_atual: sprintAtual,
         origem_sprint: origemSprint,
-        demandas_ativas: demandasAtivas,
+        total_demandas_ativas: demandasAtivas.length,
+        demandas_ativas: demandasAtivas.map(formatDemandaResumo),
         offline_pendentes: offlinePending.map((p) => ({
           client_id: p.client_id,
           tipo: p.type,
@@ -186,11 +188,20 @@ export function registerContextTools(
     async ({ status }: { status?: string }) => {
       try {
         const projetos = await apiClient.listProjetos(status || 'ativo');
+        const formatados = Array.isArray(projetos) ? projetos.map(formatProjetoItem) : [];
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(projetos, null, 2),
+              text: JSON.stringify(
+                {
+                  status: 'sucesso',
+                  total: formatados.length,
+                  projetos: formatados,
+                },
+                null,
+                2
+              ),
             },
           ],
         };
@@ -201,7 +212,7 @@ export function registerContextTools(
               type: 'text',
               text: JSON.stringify(
                 {
-                  erro: true,
+                  status: 'erro',
                   mensagem: `Não foi possível listar projetos: ${err.message}`,
                 },
                 null,

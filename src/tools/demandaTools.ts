@@ -9,6 +9,10 @@ import {
   PrioridadeDemandaEnum,
   StatusDemandaEnum,
 } from '../types.js';
+import {
+  formatDemandaDetalhes,
+  formatDemandaResumo,
+} from '../services/responseFormatter.js';
 
 export const CriarDemandaSchema = {
   projeto_id: z.number().describe('ID do projeto no Gestão de Tarefas.'),
@@ -212,6 +216,7 @@ export function registerDemandaTools(
     async (params: any) => {
       try {
         const demandas = await apiClient.listDemandas(params);
+        const formatadas = Array.isArray(demandas) ? demandas.map(formatDemandaResumo) : [];
         return {
           content: [
             {
@@ -219,8 +224,8 @@ export function registerDemandaTools(
               text: JSON.stringify(
                 {
                   status: 'sucesso',
-                  total: demandas.length,
-                  demandas,
+                  total: formatadas.length,
+                  demandas: formatadas,
                 },
                 null,
                 2
@@ -242,9 +247,10 @@ export function registerDemandaTools(
                 {
                   status: 'offline',
                   aviso: `Não foi possível conectar à API: ${err.message}`,
+                  total_offline: offlineDemandas.length,
                   demandas_offline_pendentes: offlineDemandas.map((o) => ({
                     client_id: o.client_id,
-                    ...o.payload,
+                    ...formatDemandaResumo(o.payload),
                   })),
                 },
                 null,
@@ -263,12 +269,20 @@ export function registerDemandaTools(
     ObterDetalhesDemandaSchema,
     async ({ demanda_id }: { demanda_id: number }) => {
       try {
-        const detalhes = await apiClient.getDemandaDetalhes(demanda_id);
+        const rawDetalhes = await apiClient.getDemandaDetalhes(demanda_id);
+        const formatados = formatDemandaDetalhes(rawDetalhes);
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(detalhes, null, 2),
+              text: JSON.stringify(
+                {
+                  status: 'sucesso',
+                  demanda: formatados,
+                },
+                null,
+                2
+              ),
             },
           ],
         };

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ApiClient, NetworkError, ValidationError } from '../services/apiClient.js';
 import { OfflineQueue } from '../services/offlineQueue.js';
 import { ContextDetector } from '../services/contextDetector.js';
+import { formatSubtarefaItem } from '../services/responseFormatter.js';
 
 export const CriarSubtarefaSchema = {
   demanda_id: z
@@ -200,8 +201,8 @@ export function registerSubtarefaTools(
                 {
                   status: 'sucesso',
                   subtarefa_id,
-                  mensagem: 'Subtarefa atualizada com sucesso.',
-                  resultado: result,
+                  mensagem: result?.message || 'Subtarefa atualizada com sucesso.',
+                  subtarefa: result?.data ? formatSubtarefaItem(result.data) : undefined,
                 },
                 null,
                 2

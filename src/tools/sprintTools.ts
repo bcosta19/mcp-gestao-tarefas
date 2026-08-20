@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ApiClient, NetworkError } from '../services/apiClient.js';
 import { OfflineQueue } from '../services/offlineQueue.js';
+import { formatSprintItem } from '../services/responseFormatter.js';
 
 export const ListarSprintsSchema = {};
 
@@ -17,12 +18,18 @@ export function registerSprintTools(server: any, apiClient: ApiClient, queue: Of
     async () => {
       try {
         const sprints = await apiClient.listSprints();
+        const formatadas = Array.isArray(sprints) ? sprints.map(formatSprintItem) : [];
         return {
           content: [
             {
               type: 'text',
               text: JSON.stringify(
-                { status: 'sucesso', origem: 'api', total: sprints.length, sprints },
+                {
+                  status: 'sucesso',
+                  origem: 'api',
+                  total: formatadas.length,
+                  sprints: formatadas,
+                },
                 null,
                 2
               ),
@@ -33,6 +40,7 @@ export function registerSprintTools(server: any, apiClient: ApiClient, queue: Of
         // Offline: devolve a última lista persistida localmente.
         if (err instanceof NetworkError) {
           const cached = queue.getSprints();
+          const formatadas = Array.isArray(cached) ? cached.map(formatSprintItem) : [];
           return {
             content: [
               {
@@ -42,8 +50,8 @@ export function registerSprintTools(server: any, apiClient: ApiClient, queue: Of
                     status: 'sucesso_offline',
                     origem: 'cache',
                     mensagem: 'API indisponível; lista exibida do cache local.',
-                    total: cached.length,
-                    sprints: cached,
+                    total: formatadas.length,
+                    sprints: formatadas,
                   },
                   null,
                   2
