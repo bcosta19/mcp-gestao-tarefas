@@ -160,6 +160,36 @@ Exemplo para o **OpenCode** (`~/.config/opencode/opencode.json`):
 }
 ```
 
+### Harness Pi
+
+O [Pi](https://pi.dev) não possui MCP nativo: o suporte vem do pacote
+[pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). O `npm run setup`
+detecta o diretório do agente (`~/.pi/agent`, ou `PI_CODING_AGENT_DIR`),
+grava o servidor em `~/.pi/agent/mcp.json`, instala a skill em
+`~/.pi/agent/skills/` e executa `pi install npm:pi-mcp-adapter` quando o
+binário `pi` está disponível. Configuração manual equivalente:
+
+```bash
+pi install npm:pi-mcp-adapter
+```
+
+```json
+{
+  "mcpServers": {
+    "gestao-tarefas": {
+      "command": "node",
+      "args": ["/caminho/para/mcp-gestao-tarefas/dist/index.js"],
+      "env": {
+        "GESTAO_TAREFAS_API_URL": "https://seu-servidor-de-gestao.exemplo",
+        "GESTAO_TAREFAS_API_TOKEN": "CONFIGURADO_LOCALMENTE",
+        "OFFLINE_QUEUE_PATH": "~/.gestao-tarefas-mcp/queue.sqlite",
+        "IGNORE_EXTERNAL_PROJECTS": "true"
+      }
+    }
+  }
+}
+```
+
 Após alterar o código, execute `npm run build` e reinicie o cliente MCP.
 
 A visão geral dos componentes e dos fluxos está em

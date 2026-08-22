@@ -7,6 +7,9 @@ import {
   injectIntoCodex,
   injectIntoOpenCode,
   injectIntoStandardJsonMcpClients,
+  injectIntoPi,
+  isPiMcpAdapterInstalled,
+  getPiAgentDir,
   injectSkills,
 } from '../src/cli/setup.js';
 
@@ -143,6 +146,73 @@ describe('setup CLI - MCP configuration automation', () => {
       const content = JSON.parse(fs.readFileSync(mcpFile, 'utf8'));
       expect(content.mcpServers['gestao-tarefas']).toBeDefined();
       expect(content.mcpServers['gestao-tarefas'].args).toEqual(['/test/dist/index.js']);
+    });
+
+    describe('Pi harness (pi-mcp-adapter)', () => {
+      it('should resolve the Pi agent dir from PI_CODING_AGENT_DIR', () => {
+        const original = process.env.PI_CODING_AGENT_DIR;
+        try {
+          process.env.PI_CODING_AGENT_DIR = '/custom/pi/agent';
+          expect(getPiAgentDir()).toBe('/custom/pi/agent');
+        } finally {
+          if (original === undefined) {
+            delete process.env.PI_CODING_AGENT_DIR;
+          } else {
+            process.env.PI_CODING_AGENT_DIR = original;
+          }
+        }
+      });
+
+      it('should not inject when the Pi agent dir does not exist', () => {
+        const success = injectIntoPi(
+          '/test/dist/index.js',
+          'https://test.gov.br',
+          'tok123',
+          path.join(tmpDir, 'missing-pi')
+        );
+
+        expect(success).toBe(false);
+      });
+
+      it('should inject into ~/.pi/agent/mcp.json preserving other keys', () => {
+        const piAgentDir = path.join(tmpDir, 'pi-agent');
+        fs.mkdirSync(piAgentDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(piAgentDir, 'mcp.json'),
+          JSON.stringify({
+            settings: { toolPrefix: 'short' },
+            mcpServers: {},
+          }),
+          'utf8'
+        );
+
+        const success = injectIntoPi(
+          '/test/dist/index.js',
+          'https://test.gov.br',
+          'tok123',
+          piAgentDir
+        );
+
+        expect(success).toBe(true);
+        const content = JSON.parse(
+          fs.readFileSync(path.join(piAgentDir, 'mcp.json'), 'utf8')
+        );
+        expect(content.settings.toolPrefix).toBe('short');
+        expect(content.mcpServers['gestao-tarefas']).toBeDefined();
+        expect(content.mcpServers['gestao-tarefas'].command).toBe('node');
+        expect(content.mcpServers['gestao-tarefas'].args).toEqual(['/test/dist/index.js']);
+        expect(content.mcpServers['gestao-tarefas'].env.GESTAO_TAREFAS_API_URL).toBe(
+          'https://test.gov.br'
+        );
+      });
+
+      it('should detect an installed pi-mcp-adapter package', () => {
+        const piAgentDir = path.join(tmpDir, 'pi-agent-adapter');
+        fs.mkdirSync(path.join(piAgentDir, 'npm', 'pi-mcp-adapter'), { recursive: true });
+
+        expect(isPiMcpAdapterInstalled(piAgentDir)).toBe(true);
+        expect(isPiMcpAdapterInstalled(path.join(tmpDir, 'no-adapter'))).toBe(false);
+      });
     });
 
     it('should inject skills into Codex and Antigravity skill directories', () => {

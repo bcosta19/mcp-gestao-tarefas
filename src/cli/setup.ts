@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import readline from 'readline';
+import { execFileSync } from 'child_process';
 import axios from 'axios';
 import { normalizeCookieHeader } from '../services/auth.js';
 
@@ -328,6 +329,60 @@ export function injectIntoStandardJsonMcpClients(
   }
 }
 
+export function getPiAgentDir(): string {
+  return process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent');
+}
+
+/**
+ * O harness Pi (https://pi.dev) não possui MCP nativo: ele depende do pacote
+ * pi-mcp-adapter, que lê arquivos MCP no formato padrão `mcpServers`. O
+ * override global do Pi é `<Pi agent dir>/mcp.json` (~/.pi/agent/mcp.json).
+ */
+export function injectIntoPi(
+  scriptPath: string,
+  apiUrl: string,
+  token: string,
+  agentDir: string = getPiAgentDir()
+): boolean {
+  if (!fs.existsSync(agentDir)) {
+    return false;
+  }
+
+  return injectIntoStandardJsonMcpClients(
+    path.join(agentDir, 'mcp.json'),
+    scriptPath,
+    apiUrl,
+    token
+  );
+}
+
+export function isPiMcpAdapterInstalled(agentDir: string = getPiAgentDir()): boolean {
+  return fs.existsSync(path.join(agentDir, 'npm', 'pi-mcp-adapter'));
+}
+
+/**
+ * Instala o adaptador MCP oficial do Pi (`pi install npm:pi-mcp-adapter`).
+ * Best-effort: se o binário `pi` não estiver disponível ou a instalação
+ * falhar, o setup continua e apenas avisa o usuário.
+ */
+export function ensurePiMcpAdapter(
+  agentDir: string = getPiAgentDir()
+): { installed: boolean; attempted: boolean } {
+  if (isPiMcpAdapterInstalled(agentDir)) {
+    return { installed: true, attempted: false };
+  }
+
+  try {
+    execFileSync('pi', ['install', 'npm:pi-mcp-adapter'], {
+      stdio: 'pipe',
+      timeout: 180000,
+    });
+    return { installed: true, attempted: true };
+  } catch {
+    return { installed: false, attempted: true };
+  }
+}
+
 export function injectSkills(projectDir: string = process.cwd()): string[] {
   const updatedSkills: string[] = [];
   const homedir = os.homedir();
@@ -392,6 +447,20 @@ export function injectSkills(projectDir: string = process.cwd()): string[] {
     }
   }
 
+  // 4. Pi coding agent Skill directory (~/.pi/agent/skills/gestao-tarefas/SKILL.md)
+  const piAgentDir = getPiAgentDir();
+  if (fs.existsSync(piAgentDir)) {
+    try {
+      const piSkillDir = path.join(piAgentDir, 'skills', 'gestao-tarefas');
+      fs.mkdirSync(piSkillDir, { recursive: true });
+      const targetFile = path.join(piSkillDir, 'SKILL.md');
+      fs.writeFileSync(targetFile, skillContent, 'utf8');
+      updatedSkills.push(targetFile);
+    } catch {
+      // ignore
+    }
+  }
+
   return updatedSkills;
 }
 
@@ -439,6 +508,11 @@ export function injectIntoMcpClients(
     if (injectIntoCodex(cfgPath, scriptPath, apiUrl, token, projectCwd)) {
       updatedFiles.push(cfgPath);
     }
+  }
+
+  // 4. Pi harness (~/.pi/agent/mcp.json via pi-mcp-adapter)
+  if (injectIntoPi(scriptPath, apiUrl, token)) {
+    updatedFiles.push(path.join(getPiAgentDir(), 'mcp.json'));
   }
 
   return updatedFiles;
@@ -623,8 +697,26 @@ export async function runSetup() {
   const scriptPath = path.resolve(process.cwd(), 'dist/index.js');
   const injectedConfigs = injectIntoMcpClients(scriptPath, apiUrl, token);
 
-  // 4. Injeta a Skill nos clientes suportados (Codex e Antigravity CLI)
+  // 4. Injeta a Skill nos clientes suportados (Codex, Antigravity CLI, Claude e Pi)
   const injectedSkills = injectSkills(process.cwd());
+
+  // 5. Garante o pi-mcp-adapter instalado quando o harness Pi for detectado
+  let piAdapter: { installed: boolean; attempted: boolean } | null = null;
+  if (fs.existsSync(getPiAgentDir())) {
+    piAdapter = ensurePiMcpAdapter();
+    if (piAdapter.installed) {
+      console.log(
+        piAdapter.attempted
+          ? '🧩 pi-mcp-adapter instalado via `pi install npm:pi-mcp-adapter`'
+          : '🧩 pi-mcp-adapter já estava instalado no Pi'
+      );
+    } else {
+      console.log(
+        '⚠️  Não foi possível instalar o pi-mcp-adapter automaticamente.'
+      );
+      console.log('   Execute manualmente: pi install npm:pi-mcp-adapter');
+    }
+  }
 
   console.log('\n✅ Configuração e Token salvos com sucesso!');
   console.log(`   🌐 API URL: ${apiUrl}`);
