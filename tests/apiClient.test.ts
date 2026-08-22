@@ -343,6 +343,57 @@ describe('ApiClient (HTTP & Error Handling)', () => {
     expect(result.id).toBe(101);
   });
 
+  it('should not fetch the whole demand list before a create that returns its ID', async () => {
+    const client = new ApiClient({
+      ...testConfig,
+      apiToken: 'XSRF-TOKEN=encrypted-token%3D; gestao_de_tarefas_session=session-cookie',
+    });
+    let listCalls = 0;
+    (client as any).listDemandas = async () => {
+      listCalls += 1;
+      return [];
+    };
+
+    const result = await client.createDemanda({
+      projeto_id: 1,
+      titulo: 'No prefetch',
+      descricao: 'Descrição técnica',
+      prioridade: 'Alta',
+    });
+
+    expect(result.id).toBe(101);
+    expect(listCalls).toBe(0);
+  });
+
+  it('should serialize session creates when the API requires ID recovery', async () => {
+    const client = new ApiClient({
+      ...testConfig,
+      apiToken: 'XSRF-TOKEN=encrypted-token%3D; gestao_de_tarefas_session=session-cookie',
+    });
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let createCalls = 0;
+    (client as any).client.post = async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      createCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return { data: { success: true } };
+    };
+    (client as any).listDemandas = async () => [
+      { id: 100 + createCalls, titulo: 'Serialized create' },
+    ];
+
+    const results = await Promise.all([
+      client.createDemanda({ projeto_id: 1, titulo: 'Serialized create', descricao: 'A', prioridade: 'Alta' }),
+      client.createDemanda({ projeto_id: 1, titulo: 'Serialized create', descricao: 'B', prioridade: 'Alta' }),
+    ]);
+
+    expect(maxInFlight).toBe(1);
+    expect(results.every((result) => result.success)).toBe(true);
+  });
+
   it('should throw ValidationError (422) with detailed field errors when title is missing', async () => {
     const client = new ApiClient(testConfig);
 
@@ -420,6 +471,26 @@ describe('ApiClient (HTTP & Error Handling)', () => {
     expect(result.total).toBe(2);
     expect(result.sucesso).toEqual([10, 11]);
     expect(result.falhas).toHaveLength(0);
+  });
+
+  it('should cap concurrent requests when concluding a large batch', async () => {
+    const client = new ApiClient(testConfig);
+    let inFlight = 0;
+    let maxInFlight = 0;
+
+    (client as any).alterarStatusSubtarefa = async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+    };
+
+    const result = await client.concluirSubtarefas(
+      Array.from({ length: 12 }, (_, index) => index + 1)
+    );
+
+    expect(result.falhas).toHaveLength(0);
+    expect(maxInFlight).toBeLessThanOrEqual(4);
   });
 
   it('should conclude all pending subtasks of a demand via concluirSubtarefasDaDemanda', async () => {

@@ -18,6 +18,11 @@ import {
   mergeSetCookies,
   normalizeCookieHeader,
 } from './auth.js';
+import {
+  allSettledWithConcurrency,
+  DEFAULT_BATCH_CONCURRENCY,
+} from './concurrency.js';
+import { writeFileAtomic } from './fileStore.js';
 
 type AuthMode = 'bearer' | 'session';
 
@@ -234,6 +239,7 @@ export class ApiClient {
   private email?: string;
   private password?: string;
   private refreshPromise: Promise<string> | null = null;
+  private sessionCreateTail: Promise<void> = Promise.resolve();
 
   constructor(config: AppConfig) {
     // A aplicação Laravel expõe as operações do MCP nas rotas web raiz.
@@ -389,7 +395,7 @@ export class ApiClient {
       if (!fs.existsSync(userConfigDir)) {
         fs.mkdirSync(userConfigDir, { recursive: true });
       }
-      fs.writeFileSync(configFilePath, JSON.stringify(existing, null, 2), 'utf8');
+      writeFileAtomic(configFilePath, JSON.stringify(existing, null, 2));
     } catch {}
 
     try {
@@ -404,7 +410,7 @@ export class ApiClient {
           return `${content}\n${key}=${value}`.trim() + '\n';
         };
         envContent = updateEnvKey(envContent, 'GESTAO_TAREFAS_API_TOKEN', tokenOrCookie);
-        fs.writeFileSync(envPath, envContent, 'utf8');
+        writeFileAtomic(envPath, envContent);
       }
     } catch {}
   }
@@ -795,6 +801,27 @@ export class ApiClient {
   }
 
   public async createDemanda(data: Partial<Demanda>): Promise<{ success: boolean; id?: number; message?: string; raw?: any }> {
+    if (this.authMode !== 'session') {
+      return this.createDemandaInternal(data);
+    }
+
+    // The legacy web endpoint may omit the created ID. Serialize session
+    // creates so two same-title fallback recoveries cannot select one another's
+    // record. Bearer/API endpoints can remain concurrent because they return IDs.
+    const previous = this.sessionCreateTail;
+    let release!: () => void;
+    this.sessionCreateTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await this.createDemandaInternal(data);
+    } finally {
+      release();
+    }
+  }
+
+  private async createDemandaInternal(data: Partial<Demanda>): Promise<{ success: boolean; id?: number; message?: string; raw?: any }> {
     const payload: Partial<Demanda> = {
       ...data,
       descricao: toRichTextHtml(data.descricao),
@@ -804,19 +831,6 @@ export class ApiClient {
       status: data.status || 'para_fazer',
     };
 
-    // O controller web atual retorna sucesso, mas não devolve o ID criado.
-    // Guardamos os IDs anteriores para recuperar o novo registro sem alterar
-    // a aplicação Laravel nem assumir que títulos são únicos.
-    let previousIds = new Set<number>();
-    if (this.authMode === 'session' && payload.projeto_id) {
-      try {
-        const previous = await this.listDemandas({ projeto_id: payload.projeto_id });
-        previousIds = new Set(previous.flatMap((demanda) => (demanda.id ? [demanda.id] : [])));
-      } catch {
-        // A criação ainda pode prosseguir; o ID será retornado quando a API o fornecer.
-      }
-    }
-
     try {
       const response = await this.client.post(this.resolveUrl('/demandas'), payload);
       let id = response.data?.id || response.data?.demanda?.id;
@@ -825,7 +839,7 @@ export class ApiClient {
         try {
           const after = await this.listDemandas({ projeto_id: payload.projeto_id });
           const created = after
-            .filter((demanda) => demanda.titulo === payload.titulo && demanda.id && !previousIds.has(demanda.id))
+            .filter((demanda) => demanda.titulo === payload.titulo && demanda.id)
             .sort((a, b) => Number(b.id) - Number(a.id))[0];
           id = created?.id;
         } catch {
@@ -1034,8 +1048,10 @@ export class ApiClient {
     const falhas: Array<{ id: number; erro: string }> = [];
 
     // Executa as transições em paralelo
-    const results = await Promise.allSettled(
-      uniqueIds.map((id) => this.alterarStatusSubtarefa(id, status))
+    const results = await allSettledWithConcurrency(
+      uniqueIds,
+      DEFAULT_BATCH_CONCURRENCY,
+      (id) => this.alterarStatusSubtarefa(id, status)
     );
 
     results.forEach((res, index) => {

@@ -156,7 +156,7 @@ export interface QueueItem {
   payload: Record<string, any>;
   attempts: number;
   last_error?: string | null;
-  status: 'pending' | 'failed' | 'synced';
+  status: 'pending' | 'processing' | 'failed' | 'synced';
   remote_id?: number | null;
   created_at: string;
   updated_at: string;

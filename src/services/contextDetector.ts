@@ -22,6 +22,9 @@ export class ContextDetector {
   private apiClient?: ApiClient;
   private ignorePrefeitura: boolean;
   private ignoredPatterns: string[];
+  private projectsCache: { projects: Projeto[]; expiresAt: number } | null = null;
+  private projectsRequest: Promise<Projeto[]> | null = null;
+  private readonly projectsCacheTtlMs = 30_000;
 
   constructor(apiClient?: ApiClient, options?: Partial<AppConfig>) {
     this.apiClient = apiClient;
@@ -225,7 +228,7 @@ export class ContextDetector {
 
     if (!projects && this.apiClient) {
       try {
-        projects = await this.apiClient.listProjetos();
+        projects = await this.getCachedProjects();
       } catch {
         // offline or error
         projects = [];
@@ -319,6 +322,33 @@ export class ContextDetector {
     }
 
     return null;
+  }
+
+  private async getCachedProjects(): Promise<Projeto[]> {
+    const now = Date.now();
+    if (this.projectsCache && this.projectsCache.expiresAt > now) {
+      return this.projectsCache.projects;
+    }
+
+    // Share an in-flight request as well as the completed result. This avoids
+    // a burst of tool calls spawning identical project-list requests.
+    if (!this.projectsRequest) {
+      this.projectsRequest = this.apiClient!
+        .listProjetos()
+        .then((projects) => {
+          const normalized = Array.isArray(projects) ? projects : [];
+          this.projectsCache = {
+            projects: normalized,
+            expiresAt: Date.now() + this.projectsCacheTtlMs,
+          };
+          return normalized;
+        })
+        .finally(() => {
+          this.projectsRequest = null;
+        });
+    }
+
+    return this.projectsRequest;
   }
 
   /**

@@ -146,7 +146,7 @@ export function registerContextTools(
 
       // 4. Offline items for this project
       const offlinePending = detected.id
-        ? queue.getPendingItems().filter((item) => item.payload.projeto_id === detected.id)
+        ? queue.getPendingItemsForProject(detected.id)
         : [];
 
       const responseData = {

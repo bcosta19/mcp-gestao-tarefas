@@ -121,6 +121,36 @@ describe('SyncService (Offline-to-Online Sync)', () => {
     expect(result.failed).toBe(0);
   });
 
+  it('should not send the same queue item twice when sync workers overlap', async () => {
+    const secondQueue = new OfflineQueue(path.join(tmpDir, 'queue.sqlite'));
+    queue.enqueue('demanda', {
+      projeto_id: 1,
+      titulo: 'Concurrent demand',
+      descricao: 'Created once',
+    });
+
+    let createCalls = 0;
+    const fakeApi = {
+      checkConnection: async () => ({ connected: true }),
+      createDemanda: async () => {
+        createCalls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return { success: true, id: 700 };
+      },
+    } as any;
+
+    const firstWorker = new SyncService(fakeApi, queue);
+    const secondWorker = new SyncService(fakeApi, secondQueue);
+    const [firstResult, secondResult] = await Promise.all([
+      firstWorker.sync(),
+      secondWorker.sync(),
+    ]);
+
+    expect(createCalls).toBe(1);
+    expect(firstResult.total_processed + secondResult.total_processed).toBe(1);
+    secondQueue.close();
+  });
+
   it('should sync pending demand and update status to synced with remote_id', async () => {
     const demand = queue.enqueue('demanda', {
       projeto_id: 1,
@@ -175,6 +205,41 @@ describe('SyncService (Offline-to-Online Sync)', () => {
     expect(createdSubtasks).toHaveLength(1);
     expect(createdSubtasks[0].parentDemandaId).toBe(301);
     expect(createdSubtasks[0].titulo).toBe('Subtarefa vinculada localmente');
+  });
+
+  it('should resolve an old synced demand even when it is outside the recent mapping window', async () => {
+    const demand = queue.enqueue('demanda', {
+      projeto_id: 1,
+      titulo: 'Old parent demand',
+      descricao: 'Already synced',
+    });
+    queue.markSynced(demand.id!, 812);
+    for (let index = 0; index < 205; index += 1) {
+      const filler = queue.enqueue('demanda', {
+        projeto_id: 1,
+        titulo: `Filler ${index}`,
+        descricao: 'Already synced',
+      });
+      queue.markSynced(filler.id!, 900 + index);
+    }
+    queue.enqueue('subtarefa', {
+      demanda_id: demand.client_id,
+      titulo: 'Child of old demand',
+    });
+
+    const createdParents: number[] = [];
+    const fakeApi = {
+      checkConnection: async () => ({ connected: true }),
+      createSubtarefa: async (demandaId: number) => {
+        createdParents.push(demandaId);
+        return { success: true, id: 1001 };
+      },
+    } as any;
+
+    const result = await new SyncService(fakeApi, queue).sync();
+
+    expect(result.succeeded).toBe(1);
+    expect(createdParents).toEqual([812]);
   });
 
   it('should associate a synced offline demand to its declared sprint', async () => {

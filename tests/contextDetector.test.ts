@@ -93,4 +93,24 @@ describe('ContextDetector (Project Awareness)', () => {
     const result = await detector.detectProject(emptyDir, []);
     expect(result).toBeNull();
   });
+
+  it('should cache the remote project list for repeated detection', async () => {
+    const projectDir = path.join(tmpDir, 'gestao-tarefas');
+    fs.mkdirSync(projectDir);
+    let listCalls = 0;
+    const apiClient = {
+      listProjetos: async () => {
+        listCalls += 1;
+        return [{ id: 1, nome: 'Gestão de Tarefas', status: 'ativo' }];
+      },
+    } as any;
+    const cachedDetector = new ContextDetector(apiClient, { ignorePrefeitura: false });
+
+    const first = await cachedDetector.detectProject(projectDir);
+    const second = await cachedDetector.detectProject(projectDir);
+
+    expect(first?.id).toBe(1);
+    expect(second?.id).toBe(1);
+    expect(listCalls).toBe(1);
+  });
 });

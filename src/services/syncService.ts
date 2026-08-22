@@ -12,10 +12,11 @@ export class SyncService {
   }
 
   public async sync(): Promise<SyncResult> {
-    const pendingItems = this.queue.getPendingItems();
     const results: SyncItemResult[] = [];
+    this.queue.requeueStaleProcessing();
+    const pendingCount = this.queue.getPendingCount();
 
-    if (pendingItems.length === 0) {
+    if (pendingCount === 0) {
       return {
         total_processed: 0,
         succeeded: 0,
@@ -27,6 +28,7 @@ export class SyncService {
     // Check connectivity first
     const conn = await this.apiClient.checkConnection();
     if (!conn.connected) {
+      const pendingItems = this.queue.getPendingItems();
       return {
         total_processed: 0,
         succeeded: 0,
@@ -58,8 +60,15 @@ export class SyncService {
     let succeeded = 0;
     let failed = 0;
 
-    for (const item of pendingItems) {
-      try {
+    let shouldStop = false;
+    while (!shouldStop) {
+      // Claim in bounded batches so another MCP process can work on the rest
+      // and a large offline queue does not become one giant in-memory batch.
+      const pendingItems = this.queue.claimPendingItems(50);
+      if (pendingItems.length === 0) break;
+
+      for (const item of pendingItems) {
+        try {
         if (item.type === 'demanda') {
           const response = await this.apiClient.createDemanda(item.payload);
           const remoteId = response.id;
@@ -107,7 +116,15 @@ export class SyncService {
           } else if (typeof rawDemandaId === 'string') {
             if (idMap.has(rawDemandaId)) {
               demandaId = idMap.get(rawDemandaId);
-            } else if (!isNaN(Number(rawDemandaId))) {
+            } else {
+              // The bounded recent map is only an optimization. Resolve an
+              // older dependency directly by its unique local client ID.
+              const syncedDemand = this.queue.getItemByClientId(rawDemandaId);
+              if (syncedDemand?.remote_id) {
+                demandaId = syncedDemand.remote_id;
+              }
+            }
+            if (!demandaId && !isNaN(Number(rawDemandaId))) {
               demandaId = Number(rawDemandaId);
             }
           }
@@ -150,28 +167,31 @@ export class SyncService {
           });
           succeeded++;
         }
-      } catch (err: any) {
-        const errorMsg = err.message || 'Erro durante a sincronização.';
-        if (item.id) {
-          if (err instanceof NetworkError) {
-            this.queue.incrementAttempts(item.id, errorMsg);
-          } else {
-            this.queue.markFailed(item.id, errorMsg);
+        } catch (err: any) {
+          const errorMsg = err.message || 'Erro durante a sincronização.';
+          if (item.id) {
+            if (err instanceof NetworkError) {
+              this.queue.incrementAttempts(item.id, errorMsg);
+            } else {
+              this.queue.markFailed(item.id, errorMsg);
+            }
           }
-        }
 
-        results.push({
-          id: item.id,
-          client_id: item.client_id,
-          type: item.type,
-          status: 'failed',
-          error: errorMsg,
-        });
-        failed++;
+          results.push({
+            id: item.id,
+            client_id: item.client_id,
+            type: item.type,
+            status: 'failed',
+            error: errorMsg,
+          });
+          failed++;
 
-        // If network went down in middle of sync, abort loop
-        if (err instanceof NetworkError) {
-          break;
+          // If network went down in middle of sync, release the claimed item
+          // and leave the remaining queue items for the next attempt.
+          if (err instanceof NetworkError) {
+            shouldStop = true;
+            break;
+          }
         }
       }
     }

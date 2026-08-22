@@ -236,8 +236,8 @@ export function registerDemandaTools(
       } catch (err: any) {
         // Se estiver offline, retorna demandas da fila local para o projeto
         const offlineDemandas = queue
-          .getPendingItems()
-          .filter((item) => item.type === 'demanda' && item.payload.projeto_id === params.projeto_id);
+          .getPendingItemsForProject(params.projeto_id)
+          .filter((item) => item.type === 'demanda');
 
         return {
           content: [

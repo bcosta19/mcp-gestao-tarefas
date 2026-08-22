@@ -3,6 +3,10 @@ import { ApiClient, NetworkError, ValidationError } from '../services/apiClient.
 import { OfflineQueue } from '../services/offlineQueue.js';
 import { ContextDetector } from '../services/contextDetector.js';
 import { formatSubtarefaItem } from '../services/responseFormatter.js';
+import {
+  allSettledWithConcurrency,
+  DEFAULT_BATCH_CONCURRENCY,
+} from '../services/concurrency.js';
 
 export const CriarSubtarefaSchema = {
   demanda_id: z
@@ -20,11 +24,12 @@ export const CriarSubtarefaSchema = {
 
 export const AtualizarSubtarefaSchema = {
   subtarefa_id: z
-    .union([z.number(), z.array(z.number())])
+    .union([z.number(), z.array(z.number()).max(500)])
     .optional()
     .describe('ID numérico da subtarefa ou lista de IDs a atualizar.'),
   subtarefa_ids: z
     .array(z.number())
+    .max(500)
     .optional()
     .describe('Lista de IDs de subtarefas a serem atualizadas em lote.'),
   titulo: z.string().optional().describe('Novo título da subtarefa.'),
@@ -36,6 +41,7 @@ export const AtualizarSubtarefaSchema = {
 export const ConcluirSubtarefasSchema = {
   subtarefa_ids: z
     .array(z.number())
+    .max(500)
     .optional()
     .describe('Lista com os IDs numéricos das subtarefas a serem concluídas.'),
   demanda_id: z
@@ -267,8 +273,10 @@ export function registerSubtarefaTools(
         }
 
         // Múltiplos IDs em lote
-        const results = await Promise.allSettled(
-          ids.map((id) => apiClient.updateSubtarefa(id, data))
+        const results = await allSettledWithConcurrency(
+          ids,
+          DEFAULT_BATCH_CONCURRENCY,
+          (id) => apiClient.updateSubtarefa(id, data)
         );
 
         const sucesso: number[] = [];

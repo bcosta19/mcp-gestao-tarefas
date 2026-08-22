@@ -40,6 +40,14 @@ describe('OfflineQueue (SQLite)', () => {
     expect(queue.getSyncedCount()).toBe(0);
   });
 
+  it('should configure a busy timeout and WAL for file-backed queues', () => {
+    const timeoutRow = (queue as any).db.prepare('PRAGMA busy_timeout').get() as any;
+    const journalRow = (queue as any).db.prepare('PRAGMA journal_mode').get() as any;
+
+    expect(Number(timeoutRow.timeout ?? timeoutRow.busy_timeout)).toBeGreaterThanOrEqual(5000);
+    expect(String(journalRow.journal_mode).toLowerCase()).toBe('wal');
+  });
+
   it('should retrieve pending items in FIFO order', () => {
     queue.enqueue('demanda', { titulo: 'Demanda 1', projeto_id: 1 });
     queue.enqueue('subtarefa', { titulo: 'Subtarefa 1.1', demanda_id: 1 });
@@ -48,6 +56,53 @@ describe('OfflineQueue (SQLite)', () => {
     expect(pending).toHaveLength(2);
     expect(pending[0].payload.titulo).toBe('Demanda 1');
     expect(pending[1].payload.titulo).toBe('Subtarefa 1.1');
+  });
+
+  it('should filter pending items by project in SQLite', () => {
+    queue.enqueue('demanda', { titulo: 'Project 1', projeto_id: 1 });
+    queue.enqueue('demanda', { titulo: 'Project 2', projeto_id: 2 });
+
+    const items = queue.getPendingItemsForProject(1);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].payload.titulo).toBe('Project 1');
+  });
+
+  it('should claim pending items so a second worker cannot process them', () => {
+    queue.enqueue('demanda', { titulo: 'Demanda 1', projeto_id: 1 });
+    queue.enqueue('demanda', { titulo: 'Demanda 2', projeto_id: 1 });
+
+    const claimed = queue.claimPendingItems(1);
+    expect(claimed).toHaveLength(1);
+    expect(claimed[0].status).toBe('processing');
+    expect(queue.getPendingCount()).toBe(1);
+
+    const secondWorker = new OfflineQueue(dbPath);
+    expect(secondWorker.claimPendingItems(10)).toHaveLength(1);
+    secondWorker.close();
+  });
+
+  it('should return a claimed item to pending after a transient failure', () => {
+    const item = queue.enqueue('demanda', { titulo: 'Retry me', projeto_id: 1 });
+    queue.claimPendingItems(1);
+
+    queue.incrementAttempts(item.id, 'network timeout');
+
+    const retriable = queue.getItemById(item.id);
+    expect(retriable?.status).toBe('pending');
+    expect(retriable?.attempts).toBe(1);
+    expect(queue.getPendingCount()).toBe(1);
+  });
+
+  it('should requeue stale processing items after a worker stops', async () => {
+    const item = queue.enqueue('demanda', { titulo: 'Stale item', projeto_id: 1 });
+    queue.claimPendingItems(1);
+    await new Promise((resolve) => setTimeout(resolve, 2));
+
+    queue.requeueStaleProcessing(0);
+
+    expect(queue.getItemById(item.id)?.status).toBe('pending');
+    expect(queue.getPendingCount()).toBe(1);
   });
 
   it('should mark item as synced with remote_id', () => {
