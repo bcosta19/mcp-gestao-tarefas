@@ -219,6 +219,58 @@ describe('ApiClient (HTTP & Error Handling)', () => {
         return;
       }
 
+      // Route: GET /daily-scrum/sugestoes
+      if (req.method === 'GET' && url.pathname === '/daily-scrum/sugestoes') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            status: 'sucesso',
+            data: url.searchParams.get('data') || '2026-09-11',
+            sprint_ativa: { id: 7, nome: 'Sprint 9.0' },
+            ja_registrada: null,
+            ontem: [
+              { tipo: 'demanda', id: 104, descricao: 'Demanda', status: 'em_andamento', demanda_id: 104 },
+            ],
+            hoje: [
+              { tipo: 'demanda', id: 104, descricao: 'Demanda', status: 'planejado', demanda_id: 104 },
+            ],
+            impedimentos: [],
+          })
+        );
+        return;
+      }
+
+      // Route: POST /daily-scrum
+      if (req.method === 'POST' && url.pathname === '/daily-scrum') {
+        let body = '';
+        req.on('data', (c) => (body += c));
+        req.on('end', () => {
+          const parsed = JSON.parse(body || '{}');
+          if (parsed.data === '2026-01-02') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                status: 'ja_existe',
+                id: 70,
+                resumo: 'Daily já registrada',
+                mensagem: 'Já existe uma daily registrada para esta data deste colaborador.',
+              })
+            );
+            return;
+          }
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              status: 'sucesso',
+              id: 77,
+              resumo: 'resumo da daily',
+              mensagem: 'Daily registrada com sucesso.',
+            })
+          );
+        });
+        return;
+      }
+
       // Default 404
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ message: 'Not found' }));
@@ -501,5 +553,37 @@ describe('ApiClient (HTTP & Error Handling)', () => {
     expect(result.total_encontradas).toBe(2);
     expect(result.total_atualizadas).toBe(2);
     expect(result.sucesso).toEqual([10, 11]);
+  });
+
+  it('should fetch daily suggestions from /daily-scrum/sugestoes', async () => {
+    const client = new ApiClient(testConfig);
+    const sugestoes = await client.getDailySugestoes({ data: '2026-09-11' });
+
+    expect(sugestoes.status).toBe('sucesso');
+    expect(sugestoes.data).toBe('2026-09-11');
+    expect(sugestoes.sprint_ativa?.id).toBe(7);
+    expect(sugestoes.ontem[0].demanda_id).toBe(104);
+    expect(sugestoes.hoje[0].demanda_id).toBe(104);
+  });
+
+  it('should create a daily and parse the JSON response', async () => {
+    const client = new ApiClient(testConfig);
+    const result = await client.createDaily({
+      data: '2026-09-11',
+      ontem: [{ descricao: 'Avancei', status: 'em_andamento', demanda_id: 104 }],
+      hoje: [{ descricao: 'Continuo', demanda_id: 104 }],
+    });
+
+    expect(result.status).toBe('sucesso');
+    expect(result.id).toBe(77);
+    expect(result.resumo).toBe('resumo da daily');
+  });
+
+  it('should surface the existing daily id when it was already registered', async () => {
+    const client = new ApiClient(testConfig);
+    const result = await client.createDaily({ data: '2026-01-02' });
+
+    expect(result.status).toBe('ja_existe');
+    expect(result.id).toBe(70);
   });
 });

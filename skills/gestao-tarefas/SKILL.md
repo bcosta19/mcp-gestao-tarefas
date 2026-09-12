@@ -63,3 +63,12 @@ Ao usar `criar_subtarefa`, `atualizar_subtarefa` ou `concluir_subtarefas`:
 - O MCP renova sessões web e tokens automaticamente de forma transparente quando as credenciais estiverem salvas.
 - Caso receba erro de autenticação persistente ou se o usuário informar novas credenciais, utilize a ferramenta `renovar_sessao` com `email` e `password`.
 
+## 7. Daily Automática
+
+Quando o usuário precisar preencher a daily (normalmente ao final do dia):
+
+1. Confirme a data e o horário da daily (ex.: "a daily foi às 17h"). Se o usuário não informar, use o dia atual até o momento da conversa.
+2. Chame `rascunho_daily` passando `data` e a janela (`hora_inicio`/`hora_fim`). O rascunho combina as sugestões do Gestão de Tarefas com os repositórios git movimentados em `DAILY_SCAN_DIRS`; ele **não grava nada**.
+3. Revise o rascunho com o usuário: ajuste `ontem`/`hoje`, confirme as observações (atividade por repositório) e os impedimentos.
+4. Chame `criar_daily` com os itens revisados. Se já existir daily para a data, a ferramenta retorna o id e o resumo da existente, sem criar duplicata.
+

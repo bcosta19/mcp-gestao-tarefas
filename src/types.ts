@@ -177,3 +177,74 @@ export interface SyncResult {
   failed: number;
   items: SyncItemResult[];
 }
+
+/** Sugestão de item da daily devolvida pelo Gestão de Tarefas. */
+export interface DailySugestao {
+  tipo: 'demanda' | 'subtarefa' | 'afazer' | string;
+  id: number;
+  descricao: string;
+  status: string;
+  demanda_id?: number | null;
+  subtarefa_id?: number | null;
+  afazer_id?: number | null;
+  sprint_id?: number | null;
+}
+
+export interface DailyImpedimentoResumo {
+  id: number;
+  titulo: string;
+  status?: string;
+  prioridade?: string;
+  demanda_id?: number | null;
+}
+
+export interface DailySugestoes {
+  status: string;
+  data: string;
+  usuario?: { id: number; nome: string };
+  sprint_ativa?: { id: number; nome: string } | null;
+  ja_registrada?: { id: number; resumo?: string | null } | null;
+  ontem: DailySugestao[];
+  hoje: DailySugestao[];
+  impedimentos: DailyImpedimentoResumo[];
+}
+
+export interface DailyCommit {
+  hash: string;
+  data: string;
+  mensagem: string;
+  autor?: string;
+}
+
+export interface DailyAtividadeGit {
+  repositorio: string;
+  caminho: string;
+  projeto: { id?: number; nome: string } | null;
+  ignorado: boolean;
+  motivo_desativacao?: string;
+  commits: DailyCommit[];
+  arquivos_alterados: number;
+}
+
+export interface DailyItemRascunho {
+  descricao: string;
+  status?: string;
+  demanda_id?: number | null;
+  subtarefa_id?: number | null;
+  afazer_id?: number | null;
+}
+
+export interface DailyRascunho {
+  data: string;
+  janela: { inicio: string; fim: string };
+  sprint_id: number | null;
+  usuario?: { id: number; nome: string };
+  ja_registrada: { id: number; resumo?: string | null } | null;
+  ontem: DailyItemRascunho[];
+  hoje: DailyItemRascunho[];
+  observacoes: string[];
+  impedimento_ids: number[];
+  impedimentos: DailyImpedimentoResumo[];
+  atividade_git: DailyAtividadeGit[];
+  avisos: string[];
+}

@@ -65,6 +65,8 @@ OFFLINE_QUEUE_PATH=~/.gestao-tarefas-mcp/queue.sqlite
 REQUEST_TIMEOUT_MS=5000
 IGNORE_EXTERNAL_PROJECTS=true
 IGNORED_PROJECT_PATTERNS=pessoal,personal,externo
+DAILY_SCAN_DIRS=~/Work
+DAILY_GIT_AUTHOR_EMAIL=seu.email@empresa.gov.br
 ```
 
 Não coloque tokens, senhas ou cookies em arquivos versionados.
@@ -79,7 +81,25 @@ O servidor fornece ferramentas para:
 - atualizar demandas e subtarefas, e consultar detalhes de demandas;
 - associar demandas a sprints;
 - operar com fila offline e sincronizar os itens posteriormente;
-- verificar a conectividade e o estado da autenticação.
+- verificar a conectividade e o estado da autenticação;
+- montar e registrar a daily automaticamente a partir da atividade git local.
+
+### Daily automática
+
+As ferramentas `rascunho_daily` e `criar_daily` automatizam o preenchimento da
+daily. Informe a janela de horário do dia (por exemplo, a daily das 17h) e o
+agente:
+
+1. coleta as sugestões de demandas, subtarefas, afazeres e impedimentos direto
+   do Gestão de Tarefas;
+2. varre os repositórios git sob `DAILY_SCAN_DIRS` em busca de commits do autor
+   (`DAILY_GIT_AUTHOR_EMAIL`) e arquivos em alteração na janela informada;
+3. devolve um rascunho pré-preenchido (`ontem`, `hoje`, observações com a
+   atividade por repositório e impedimentos) para revisão;
+4. grava a daily revisada com `criar_daily`.
+
+`rascunho_daily` não grava nada; `criar_daily` respeita a regra de uma daily por
+usuário/data — se já existir, retorna o id e o resumo da daily registrada.
 
 Projetos da Prefeitura permanecem ativos por padrão. Projetos pessoais ou
 externos podem ser ignorados por padrões configurados em

@@ -14,6 +14,8 @@ export interface AppConfig {
   requestTimeoutMs: number;
   ignorePrefeitura: boolean;
   ignoredPatterns: string[];
+  dailyScanDirs: string[];
+  dailyGitAuthorEmail?: string;
 }
 
 function resolvePath(p: string): string {
@@ -51,6 +53,19 @@ export function loadConfig(overrides?: Partial<AppConfig>): AppConfig {
     'true';
   const envIgnoredPatterns = process.env.IGNORED_PROJECT_PATTERNS || 'pessoal,personal,externo';
 
+  // Raízes varridas pelo rascunho automático da daily em busca de
+  // repositórios git com atividade no período.
+  const rawScanDirs = process.env.DAILY_SCAN_DIRS || '~/Work';
+
+  // Autor git usado para filtrar commits do usuário. Cai para o e-mail de
+  // login no Gestão de Tarefas quando não informado explicitamente.
+  const dailyGitAuthorEmail =
+    overrides?.dailyGitAuthorEmail ||
+    process.env.DAILY_GIT_AUTHOR_EMAIL ||
+    process.env.GESTAO_TAREFAS_EMAIL ||
+    globalUserCfg.email ||
+    undefined;
+
   return {
     apiUrl: (
       overrides?.apiUrl ||
@@ -74,6 +89,14 @@ export function loadConfig(overrides?: Partial<AppConfig>): AppConfig {
     ignoredPatterns:
       overrides?.ignoredPatterns ||
       envIgnoredPatterns.split(',').map((p) => p.trim().toLowerCase()).filter(Boolean),
+    dailyScanDirs:
+      overrides?.dailyScanDirs ||
+      rawScanDirs
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .map((p) => resolvePath(p)),
+    dailyGitAuthorEmail,
   };
 }
 

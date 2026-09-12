@@ -4,6 +4,8 @@ import path from 'path';
 import os from 'os';
 import {
   Colaborador,
+  DailyItemRascunho,
+  DailySugestoes,
   Demanda,
   ImpactoDemanda,
   Projeto,
@@ -1121,6 +1123,72 @@ export class ApiClient {
       return response.data;
     } catch (err) {
       this.handleError(err, `excluir subtarefa ${subtarefaId}`);
+    }
+  }
+
+  /**
+   * Sugestões automáticas de itens da daily (ontem/hoje/impedimentos),
+   * calculadas pelo próprio Gestão de Tarefas. Retorna JSON.
+   */
+  public async getDailySugestoes(params?: {
+    data?: string;
+    user_id?: number;
+  }): Promise<DailySugestoes> {
+    try {
+      const response = await this.client.get(this.resolveUrl('/daily-scrum/sugestoes'), {
+        params: { data: params?.data, user_id: params?.user_id },
+      });
+      return response.data as DailySugestoes;
+    } catch (err) {
+      this.handleError(err, 'obter sugestões da daily');
+    }
+  }
+
+  /**
+   * Registra uma daily a partir de um rascunho. A aplicação responde em JSON
+   * quando a requisição envia Accept: application/json (padrão do cliente).
+   */
+  public async createDaily(payload: {
+    data: string;
+    sprint_id?: number | null;
+    target_user_id?: number | null;
+    ontem?: DailyItemRascunho[];
+    hoje?: DailyItemRascunho[];
+    observacoes?: string[];
+    impedimento_ids?: number[];
+  }): Promise<{ status: string; id?: number; resumo?: string | null; message: string }> {
+    try {
+      const body = {
+        data: payload.data,
+        sprint_id: payload.sprint_id ?? undefined,
+        target_user_id: payload.target_user_id ?? undefined,
+        ontem: (payload.ontem ?? []).map((item) => ({
+          descricao: item.descricao,
+          status: item.status,
+          demanda_id: item.demanda_id ?? undefined,
+          subtarefa_id: item.subtarefa_id ?? undefined,
+          afazer_id: item.afazer_id ?? undefined,
+        })),
+        hoje: (payload.hoje ?? []).map((item) => ({
+          descricao: item.descricao,
+          demanda_id: item.demanda_id ?? undefined,
+          subtarefa_id: item.subtarefa_id ?? undefined,
+          afazer_id: item.afazer_id ?? undefined,
+        })),
+        observacoes: payload.observacoes ?? [],
+        impedimento_ids: payload.impedimento_ids ?? [],
+      };
+
+      const response = await this.client.post(this.resolveUrl('/daily-scrum'), body);
+      const data = response.data ?? {};
+      return {
+        status: data.status ?? 'sucesso',
+        id: data.id,
+        resumo: data.resumo ?? null,
+        message: data.mensagem || data.message || 'Daily registrada com sucesso.',
+      };
+    } catch (err) {
+      this.handleError(err, 'registrar daily');
     }
   }
 }
