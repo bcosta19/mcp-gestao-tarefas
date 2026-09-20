@@ -182,6 +182,42 @@ describe('DailyService - rascunho automático da daily', () => {
     expect(rascunho.atividade_git).toHaveLength(1);
     expect(rascunho.avisos.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('encontra os repositórios filhos quando a raiz tem resíduo de .git vazio', async () => {
+    fs.mkdirSync(path.join(root, '.git'));
+    criarRepo(root, 'projeto-delta', 'dev@test.local', 'feat: trabalho sob raiz suja');
+
+    const detector = new ContextDetector(undefined, { ignorePrefeitura: true });
+    const service = new DailyService(fakeApi(), detector, makeConfig(root));
+
+    const rascunho = await service.gerarRascunho({
+      data: localHoje(),
+      horaInicio: '00:00',
+      horaFim: '23:59',
+    });
+
+    expect(rascunho.atividade_git).toHaveLength(1);
+    expect(rascunho.atividade_git[0].repositorio).toBe('projeto-delta');
+    expect(rascunho.observacoes[0]).toContain('projeto-delta');
+  });
+
+  it('reconhece worktree vinculado, cujo .git é arquivo ponteiro', async () => {
+    const principal = criarRepo(root, 'projeto-base', 'dev@test.local', 'feat: base');
+    git(principal, 'worktree add -q ../projeto-vinculado -b vinculado');
+
+    const detector = new ContextDetector(undefined, { ignorePrefeitura: true });
+    const service = new DailyService(fakeApi(), detector, makeConfig(root));
+
+    const rascunho = await service.gerarRascunho({
+      data: localHoje(),
+      horaInicio: '00:00',
+      horaFim: '23:59',
+    });
+
+    expect(rascunho.atividade_git.map((atividade) => atividade.caminho)).toContain(
+      path.join(root, 'projeto-vinculado')
+    );
+  });
 });
 
 describe('DailyTools - criar_daily', () => {

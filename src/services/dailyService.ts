@@ -181,7 +181,17 @@ export class DailyService {
     const encontrados: string[] = [];
 
     const visitar = (dir: string, profundidade: number): void => {
-      if (fs.existsSync(path.join(dir, '.git'))) {
+      const gitPath = path.join(dir, '.git');
+
+      // Um `.git` presente não basta: só é repositório se for um arquivo
+      // ponteiro (worktree/submódulo) ou um diretório com `HEAD` versionado.
+      // Resíduo de `.git` vazio não é repositório e não pode interromper a
+      // varredura, senão os projetos filhos deixam de ser encontrados.
+      const gitStat = fs.statSync(gitPath, { throwIfNoEntry: false });
+      const ehRepositorio =
+        gitStat?.isFile() === true || fs.existsSync(path.join(gitPath, 'HEAD'));
+
+      if (ehRepositorio) {
         encontrados.push(dir);
         return;
       }
