@@ -1,74 +1,144 @@
 ---
 name: gestao-tarefas
-description: >
-  Guia obrigatório de boas práticas e protocolo para integração com o servidor MCP Gestão de Tarefas.
-  Use sempre que for interagir com demandas, subtarefas, sprints ou projetos da Prefeitura de Maricá / Codemar.
+description: "Protocolo obrigatório do servidor MCP Gestão de Tarefas (Prefeitura de Maricá / Codemar). Use sempre que for criar, consultar, atualizar ou concluir demandas, subtarefas, sprints, projetos ou dailies, e antes de registrar qualquer trabalho no sistema."
 ---
 
-# Protocolo e Boas Práticas do MCP Gestão de Tarefas
+# Protocolo do MCP Gestão de Tarefas
 
-Este documento orienta o agente sobre as regras de negócio, tomada de decisão e sequência correta de chamadas das ferramentas do servidor MCP **Gestão de Tarefas**.
+Regras de negócio, tomada de decisão e sequência correta das chamadas das
+ferramentas do servidor MCP **Gestão de Tarefas**.
 
-## 1. Regra de Ouro: Detecção de Contexto Obrigatória
+## Quando usar
 
-Antes de realizar **qualquer** operação de leitura ou escrita de demandas/subtarefas:
+Use esta skill sempre que o usuário:
 
-1. Chame sempre `obter_contexto_projeto` passando o diretório do projeto (`diretorio_path`).
-2. Avalie o retorno do campo `mcp_ativo`:
-   - Se `mcp_ativo === false`: O projeto atual é externo, pessoal ou não identificado. **NÃO crie ou altere demandas no Gestão de Tarefas.** Informe o usuário de forma respeitosa que o projeto não está vinculado ao sistema.
-   - Se `mcp_ativo === true`: Prossiga utilizando o `projeto.id`, o nome do projeto e a `sprint_atual` detectada.
+- pedir para criar, consultar ou atualizar **demandas** ou **subtarefas**;
+- mencionar **sprints**, **projetos** ou o sistema Gestão de Tarefas;
+- pedir para **preencher ou registrar a daily**;
+- reportar erro de conexão, autenticação ou sincronização do MCP.
 
-## 2. Prevenção de Duplicações e Poluição
+## Regra de ouro: validar contexto antes de tudo
 
-Evite criar demandas repetidas ou rascunhos sem necessidade:
+Antes de **qualquer** operação de leitura ou escrita de demandas/subtarefas:
 
-1. **Consulta prévia:** Antes de propor criar uma nova demanda, chame `listar_demandas_ativas` com o `projeto_id` do projeto atual para consultar as demandas em andamento.
-2. **Preferência por Subtarefas:**
-   - Se o desenvolvedor estiver executando uma tarefa técnica referente a uma demanda já existente (ex: "Ajustes nas telas", "Correções gerais", "Implementação de módulo"), crie **subtarefas** vinculadas a essa demanda via `criar_subtarefa`.
-   - Crie uma **nova demanda** (`criar_demanda`) **apenas** quando:
-     - Tratar-se de uma nova funcionalidade / iniciativa de escopo separado;
-     - O usuário solicitar expressamente a criação de uma nova demanda.
+1. Chame `obter_contexto_projeto` passando o `diretorio_path` do projeto atual.
+2. Avalie o campo `mcp_ativo` do retorno:
 
-## 3. Padrões para Criação e Atualização de Demandas
+| `mcp_ativo` | Ação |
+| --- | --- |
+| `false` | Projeto externo, pessoal ou não identificado. **Não crie nem altere demandas.** Informe o usuário, de forma respeitosa, que o projeto não está vinculado ao sistema. |
+| `true` | Prossiga usando o `projeto.id`, o nome do projeto e a `sprint_atual` detectada. |
 
-Ao usar `criar_demanda` ou `atualizar_demanda`:
+```json
+// obter_contexto_projeto — 1ª chamada de qualquer fluxo
+{ "diretorio_path": "/home/dev/Work/projeto-x" }
+```
 
-- **Título:** Claro, conciso e semântico (ex: `feat(auth): adiciona login sso`, `fix(ui): corrige overflow na listagem`).
-- **Descrição (`descricao`):** Formate sempre em HTML estruturado (`<p>`, `<ul>`, `<li>`, `<strong>`, `<code>`).
-- **Data Limite (`data_limite`):** Obrigatória no formato `YYYY-MM-DD`. Por padrão, utilize a data de fim da sprint ativa ou a data limite acordada.
-- **Sprint (`sprint_id`):** Vincule à sprint ativa do projeto (`sprint_atual.id`).
-- **Responsável (`responsavel_id`):** Atribua ao ID do colaborador que está desenvolvendo (identificado no contexto ou nas demandas ativas).
-- **Prioridade e Impacto:** Use `'Alta'`, `'Média'` ou `'Baixa'` para prioridade, e `'alto'`, `'medio'` ou `'baixo'` para impacto.
+## Prevenção de duplicações e poluição
 
-## 4. Padrões para Subtarefas
+1. **Consulte antes de criar** — chame `listar_demandas_ativas` com o
+   `projeto_id` atual antes de propor a criação de qualquer demanda.
+2. **Prefira subtarefas** — tarefa técnica ligada a demanda já existente
+   (ex.: "Ajustes nas telas", "Correções gerais", "Implementação de módulo")
+   vira **subtarefa** via `criar_subtarefa`.
+3. **Crie uma demanda nova** (`criar_demanda`) apenas quando:
+   - tratar-se de nova funcionalidade ou iniciativa de escopo separado;
+   - o usuário solicitar expressamente a criação de uma nova demanda.
 
-Ao usar `criar_subtarefa`, `atualizar_subtarefa` ou `concluir_subtarefas`:
+## Padrões de demanda (`criar_demanda` / `atualizar_demanda`)
 
-- **Granularidade:** Cada subtarefa deve descrever um incremento técnico atômico e verificável.
-- **Ciclo de vida:**
-  - Crie a subtarefa no início da atividade (`criar_subtarefa`).
-  - Ao concluir as implementações, conclua as subtarefas em uma única chamada usando:
-    - `concluir_subtarefas(subtarefa_ids: [1609, 1610])` para concluir múltiplos IDs em lote;
-    - `concluir_subtarefas(demanda_id: 10065)` para concluir todas as subtarefas pendentes de uma demanda;
-    - Ou `atualizar_subtarefa(subtarefa_id: 1609, status: "concluida")` para atualizar uma única subtarefa.
+| Campo | Padrão |
+| --- | --- |
+| `titulo` | Claro, conciso e semântico (ex.: `feat(auth): adiciona login sso`, `fix(ui): corrige overflow na listagem`). |
+| `descricao` | HTML estruturado: `<p>`, `<ul>`, `<li>`, `<strong>`, `<code>`. Texto simples é convertido automaticamente. |
+| `data_limite` | Obrigatória, `YYYY-MM-DD`. Padrão: data de fim da sprint ativa ou data limite acordada. |
+| `sprint_id` | Sempre a sprint ativa do projeto (`sprint_atual.id`). |
+| `responsavel_id` | ID do colaborador que desenvolve (identificado no contexto ou nas demandas ativas). |
+| `prioridade` | `'Alta'`, `'Média'` ou `'Baixa'`. |
+| `impacto` | `'alto'`, `'medio'` ou `'baixo'`. |
+| `status` | `para_fazer` \| `fazendo` \| `em_teste` \| `homologacao` \| `concluida` \| `cancelada` \| `impedimento`. |
 
-## 5. Operação Offline e Resiliência
+```json
+// criar_demanda
+{
+  "projeto_id": 12,
+  "titulo": "feat(auth): adiciona login sso",
+  "descricao": "<p>Implementar autenticação SSO no portal.</p><ul><li>Integrar provedor de identidade</li><li>Mapear permissões</li></ul>",
+  "prioridade": "Alta",
+  "impacto": "alto",
+  "responsavel_id": 7,
+  "sprint_id": 34,
+  "data_limite": "2026-09-30"
+}
+```
 
-- Se a intranet da Prefeitura / servidor estiver inacessível, as ferramentas registrarão as operações na fila offline local automaticamente (`~/.gestao-tarefas-mcp/queue.sqlite`).
-- Nunca tente reexecutar a mesma chamada em loop caso haja erro de rede. O MCP gerencia o armazenamento local seguro.
-- Quando a conectividade for restabelecida, execute `sincronizar_fila_offline` para enviar as requicições pendentes.
+## Padrões de subtarefas (`criar_subtarefa` / `atualizar_subtarefa` / `concluir_subtarefas`)
 
-## 6. Autenticação e Renovação Automática de Sessão
+- **Granularidade:** cada subtarefa descreve um incremento técnico atômico
+  e verificável.
+- **Status:** `pendente` \| `fazendo` \| `concluida` \| `cancelada`.
+- **Ciclo de vida:** crie a subtarefa no início da atividade e conclua ao
+  finalizar as implementações:
 
-- O MCP renova sessões web e tokens automaticamente de forma transparente quando as credenciais estiverem salvas.
-- Caso receba erro de autenticação persistente ou se o usuário informar novas credenciais, utilize a ferramenta `renovar_sessao` com `email` e `password`.
+```json
+// concluir_subtarefas — múltiplos IDs em lote
+{ "subtarefa_ids": [1609, 1610] }
 
-## 7. Daily Automática
+// concluir_subtarefas — todas as pendentes de uma demanda
+{ "demanda_id": 10065 }
+
+// atualizar_subtarefa — uma única subtarefa
+{ "subtarefa_id": 1609, "status": "concluida" }
+```
+
+## Daily (`rascunho_daily` → `criar_daily`)
 
 Quando o usuário precisar preencher a daily (normalmente ao final do dia):
 
-1. Confirme a data e o horário da daily (ex.: "a daily foi às 17h"). Se o usuário não informar, use o dia atual até o momento da conversa.
-2. Chame `rascunho_daily` passando `data` e a janela (`hora_inicio`/`hora_fim`). O rascunho combina as sugestões do Gestão de Tarefas com os repositórios git movimentados em `DAILY_SCAN_DIRS`; ele **não grava nada**.
-3. Revise o rascunho com o usuário: ajuste `ontem`/`hoje`, confirme as observações (atividade por repositório) e os impedimentos.
-4. Chame `criar_daily` com os itens revisados. Se já existir daily para a data, a ferramenta retorna o id e o resumo da existente, sem criar duplicata.
+1. **Confirme a data e o horário** (ex.: "a daily foi às 17h"). Sem
+   informação, use o dia atual até o momento da conversa.
+2. Chame `rascunho_daily` passando `data` e a janela `hora_inicio`/`hora_fim`.
+   O rascunho combina as sugestões do Gestão de Tarefas com os repositórios
+   git movimentados em `DAILY_SCAN_DIRS` — ele **não grava nada**.
+3. **Revise o rascunho com o usuário:** ajuste `ontem`/`hoje`, confirme as
+   observações (atividade por repositório) e os impedimentos.
+4. Chame `criar_daily` com os itens revisados. Se já existir daily para a
+   data, a ferramenta retorna o id e o resumo da existente, sem criar duplicata.
 
+```json
+// rascunho_daily
+{ "data": "2026-09-20", "hora_inicio": "08:00", "hora_fim": "17:00" }
+```
+
+## Operação offline e resiliência
+
+- Se a intranet da Prefeitura / servidor estiver inacessível, as ferramentas
+  registram as operações automaticamente na fila offline local
+  (`~/.gestao-tarefas-mcp/queue.sqlite`).
+- **Nunca** reexecute a mesma chamada em loop após erro de rede — o MCP
+  gerencia o armazenamento local seguro.
+- Com a conectividade restabelecida, execute `sincronizar_fila_offline` para
+  enviar as requisições pendentes.
+
+## Autenticação
+
+- O MCP renova sessões web e tokens automaticamente, de forma transparente,
+  quando as credenciais estiverem salvas.
+- Em erro de autenticação persistente, ou se o usuário informar novas
+  credenciais, utilize `renovar_sessao` com `email` e `password`.
+
+## Referência rápida
+
+| Ferramenta | Uso |
+| --- | --- |
+| `obter_contexto_projeto` | Valida o contexto e a atividade do MCP no diretório (sempre a 1ª chamada). |
+| `listar_projetos` / `listar_sprints` | Listam projetos e sprints disponíveis. |
+| `listar_demandas_ativas` | Demandas abertas ou em andamento de um projeto. |
+| `obter_detalhes_demanda` | Detalhes, subtarefas e responsáveis de uma demanda. |
+| `criar_demanda` / `atualizar_demanda` | Criam e alteram demandas. |
+| `associar_demanda_sprint` | Vincula uma demanda a uma sprint. |
+| `criar_subtarefa` / `atualizar_subtarefa` / `concluir_subtarefas` | Ciclo de vida das subtarefas. |
+| `rascunho_daily` / `criar_daily` | Montam o rascunho e registram a daily revisada. |
+| `verificar_status_conexao` | Estado da API, validade do token e fila offline pendente. |
+| `sincronizar_fila_offline` | Envia a fila offline pendente. |
+| `renovar_sessao` | Renova a sessão de autenticação. |
