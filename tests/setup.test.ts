@@ -215,16 +215,54 @@ describe('setup CLI - MCP configuration automation', () => {
       });
     });
 
-    it('should inject skills into Codex and Antigravity skill directories', () => {
+    it('should inject skills into every agent directory using an isolated HOME', () => {
+      const fakeHome = path.join(tmpDir, 'home');
       const fakeProjectDir = path.join(tmpDir, 'project');
       const fakeSkillDir = path.join(fakeProjectDir, 'skills', 'gestao-tarefas');
       fs.mkdirSync(fakeSkillDir, { recursive: true });
       fs.writeFileSync(path.join(fakeSkillDir, 'SKILL.md'), '# Skill content\n', 'utf8');
 
-      const updated = injectSkills(fakeProjectDir);
-      expect(Array.isArray(updated)).toBe(true);
-      if (updated.length > 0) {
-        expect(updated.some((p) => p.endsWith('SKILL.md'))).toBe(true);
+      // Diretórios-base de agentes que o injectSkills detecta: sem isolar a
+      // HOME, o teste sobrescreveria as skills reais instaladas do usuário.
+      const agentDirs = {
+        codex: path.join(fakeHome, '.codex'),
+        claude: path.join(fakeHome, '.claude'),
+        antigravity: path.join(fakeHome, '.gemini', 'antigravity-cli'),
+        pi: path.join(fakeHome, 'pi-agent'),
+      };
+      Object.values(agentDirs).forEach((dir) => fs.mkdirSync(dir, { recursive: true }));
+
+      const previousEnv = {
+        HOME: process.env.HOME,
+        CODEX_HOME: process.env.CODEX_HOME,
+        PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR,
+      };
+      process.env.HOME = fakeHome;
+      process.env.CODEX_HOME = agentDirs.codex;
+      process.env.PI_CODING_AGENT_DIR = agentDirs.pi;
+
+      try {
+        const updated = injectSkills(fakeProjectDir);
+
+        const expectedTargets = [
+          path.join(agentDirs.codex, 'skills', 'gestao-tarefas', 'SKILL.md'),
+          path.join(agentDirs.claude, 'skills', 'gestao-tarefas', 'SKILL.md'),
+          path.join(agentDirs.antigravity, 'skills', 'gestao-tarefas', 'SKILL.md'),
+          path.join(agentDirs.pi, 'skills', 'gestao-tarefas', 'SKILL.md'),
+        ];
+
+        for (const target of expectedTargets) {
+          expect(updated).toContain(target);
+          expect(fs.readFileSync(target, 'utf8')).toBe('# Skill content\n');
+        }
+      } finally {
+        for (const [key, value] of Object.entries(previousEnv)) {
+          if (value === undefined) {
+            delete process.env[key];
+          } else {
+            process.env[key] = value;
+          }
+        }
       }
     });
   });
