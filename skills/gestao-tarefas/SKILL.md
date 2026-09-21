@@ -1,12 +1,37 @@
 ---
 name: gestao-tarefas
-description: "Protocolo obrigatório do servidor MCP Gestão de Tarefas (Prefeitura de Maricá / Codemar). Use sempre que for criar, consultar, atualizar ou concluir demandas, subtarefas, sprints, projetos ou dailies, e antes de registrar qualquer trabalho no sistema."
+description: "Protocolo obrigatório para usar o MCP `mcp-gestao-tarefas` ao interagir com o aplicativo/API Gestão de Tarefas da Prefeitura de Maricá / Codemar. Use sempre que for criar, consultar, atualizar ou concluir demandas, subtarefas, sprints, projetos ou dailies, e antes de registrar qualquer trabalho no aplicativo."
 ---
 
-# Protocolo do MCP Gestão de Tarefas
+# Protocolo do MCP `mcp-gestao-tarefas`
 
 Regras de negócio, tomada de decisão e sequência correta das chamadas das
-ferramentas do servidor MCP **Gestão de Tarefas**.
+ferramentas expostas pelo MCP `mcp-gestao-tarefas` para operar o aplicativo
+**Gestão de Tarefas**.
+
+## Diferencie MCP e aplicativo
+
+Estes dois nomes não são sinônimos:
+
+| Nome | O que é | Papel no fluxo |
+| --- | --- | --- |
+| `mcp-gestao-tarefas` | Servidor MCP / camada de integração. | Expõe as ferramentas ao agente, valida contexto do diretório, trata autenticação e mantém a fila offline local. Não é a fonte da verdade das demandas. |
+| **Gestão de Tarefas** | Aplicativo web/API da Prefeitura de Maricá / Codemar. | Sistema onde projetos, sprints, demandas, subtarefas e dailies são persistidos. É o destino final das operações autorizadas. |
+
+Regra prática:
+
+- “ferramenta do MCP”, “fila offline do MCP” e “configuração do MCP” referem-se
+  à camada `mcp-gestao-tarefas`.
+- “projeto”, “sprint”, “demanda”, “subtarefa” e “daily do Gestão de Tarefas”
+  referem-se aos dados do aplicativo.
+- Para diagnosticar, configurar ou alterar o próprio MCP, trabalhe no checkout
+  `mcp-gestao-tarefas` e **não** use as ferramentas para gravar demandas ou
+  dailies apenas porque houve mudança no código.
+- Para diagnosticar ou alterar uma tela, rota ou regra de negócio do aplicativo,
+  trate isso como trabalho no **Gestão de Tarefas**, não como trabalho no MCP.
+- Se a intenção do usuário for apenas reportar o que fez, não registre nada no
+  aplicativo; registrar daily/demanda/subtarefa exige pedido ou protocolo
+  autorizado.
 
 ## Quando usar
 
@@ -15,19 +40,25 @@ Use esta skill sempre que o usuário:
 - pedir para criar, consultar ou atualizar **demandas** ou **subtarefas**;
 - mencionar **sprints**, **projetos** ou o sistema Gestão de Tarefas;
 - pedir para **preencher ou registrar a daily**;
-- reportar erro de conexão, autenticação ou sincronização do MCP.
+- pedir ajuda sobre o uso ou o resultado das ferramentas do MCP;
+- reportar erro de conexão, autenticação ou sincronização entre o MCP e o
+  aplicativo.
+
+Não use esta skill como autorização para registrar trabalho no aplicativo quando
+o assunto for apenas desenvolvimento, configuração ou teste do próprio MCP.
 
 ## Regra de ouro: validar contexto antes de tudo
 
 Antes de **qualquer** operação de leitura ou escrita de demandas/subtarefas:
 
 1. Chame `obter_contexto_projeto` passando o `diretorio_path` do projeto atual.
-2. Avalie o campo `mcp_ativo` do retorno:
+2. Avalie o campo `mcp_ativo` do retorno: o contexto abaixo é do **projeto no
+   aplicativo**, não do checkout do próprio MCP.
 
 | `mcp_ativo` | Ação |
 | --- | --- |
 | `false` | Projeto externo, pessoal ou não identificado. **Não crie nem altere demandas.** Informe o usuário, de forma respeitosa, que o projeto não está vinculado ao sistema. |
-| `true` | Prossiga usando o `projeto.id`, o nome do projeto e a `sprint_atual` detectada. |
+| `true` | Prossiga usando o `projeto.id`, o nome do projeto no aplicativo e a `sprint_atual` detectada. |
 
 ```json
 // obter_contexto_projeto — 1ª chamada de qualquer fluxo
@@ -98,8 +129,8 @@ Quando o usuário precisar preencher a daily (normalmente ao final do dia):
 1. **Confirme a data e o horário** (ex.: "a daily foi às 17h"). Sem
    informação, use o dia atual até o momento da conversa.
 2. Chame `rascunho_daily` passando `data` e a janela `hora_inicio`/`hora_fim`.
-   O rascunho combina as sugestões do Gestão de Tarefas com os repositórios
-   git movimentados em `DAILY_SCAN_DIRS` — ele **não grava nada**.
+   O rascunho combina as sugestões obtidas pelo MCP do aplicativo com os
+   repositórios git movimentados em `DAILY_SCAN_DIRS` — ele **não grava nada**.
 3. **Revise o rascunho com o usuário:** ajuste `ontem`/`hoje`, confirme as
    observações (atividade por repositório) e os impedimentos.
 4. Chame `criar_daily` com os itens revisados. Se já existir daily para a
@@ -112,9 +143,10 @@ Quando o usuário precisar preencher a daily (normalmente ao final do dia):
 
 ## Operação offline e resiliência
 
-- Se a intranet da Prefeitura / servidor estiver inacessível, as ferramentas
-  registram as operações automaticamente na fila offline local
-  (`~/.gestao-tarefas-mcp/queue.sqlite`).
+- Se a intranet da Prefeitura / servidor do aplicativo estiver inacessível, as
+  ferramentas do MCP registram as operações automaticamente na fila offline
+  local (`~/.gestao-tarefas-mcp/queue.sqlite`). Essa fila pertence ao MCP e não
+  ao banco de dados do aplicativo.
 - **Nunca** reexecute a mesma chamada em loop após erro de rede — o MCP
   gerencia o armazenamento local seguro.
 - Com a conectividade restabelecida, execute `sincronizar_fila_offline` para
@@ -122,8 +154,8 @@ Quando o usuário precisar preencher a daily (normalmente ao final do dia):
 
 ## Autenticação
 
-- O MCP renova sessões web e tokens automaticamente, de forma transparente,
-  quando as credenciais estiverem salvas.
+- O MCP renova sessões web e tokens do aplicativo automaticamente, de forma
+  transparente, quando as credenciais estiverem salvas.
 - Em erro de autenticação persistente, ou se o usuário informar novas
   credenciais, utilize `renovar_sessao` com `email` e `password`.
 
@@ -132,13 +164,13 @@ Quando o usuário precisar preencher a daily (normalmente ao final do dia):
 | Ferramenta | Uso |
 | --- | --- |
 | `obter_contexto_projeto` | Valida o contexto e a atividade do MCP no diretório (sempre a 1ª chamada). |
-| `listar_projetos` / `listar_sprints` | Listam projetos e sprints disponíveis. |
-| `listar_demandas_ativas` | Demandas abertas ou em andamento de um projeto. |
+| `listar_projetos` / `listar_sprints` | Listam projetos e sprints disponíveis no aplicativo. |
+| `listar_demandas_ativas` | Demandas abertas ou em andamento de um projeto do aplicativo. |
 | `obter_detalhes_demanda` | Detalhes, subtarefas e responsáveis de uma demanda. |
 | `criar_demanda` / `atualizar_demanda` | Criam e alteram demandas. |
 | `associar_demanda_sprint` | Vincula uma demanda a uma sprint. |
 | `criar_subtarefa` / `atualizar_subtarefa` / `concluir_subtarefas` | Ciclo de vida das subtarefas. |
 | `rascunho_daily` / `criar_daily` | Montam o rascunho e registram a daily revisada. |
-| `verificar_status_conexao` | Estado da API, validade do token e fila offline pendente. |
-| `sincronizar_fila_offline` | Envia a fila offline pendente. |
+| `verificar_status_conexao` | Estado da API do aplicativo, validade do token e fila offline do MCP. |
+| `sincronizar_fila_offline` | Envia a fila offline do MCP ao aplicativo. |
 | `renovar_sessao` | Renova a sessão de autenticação. |
