@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.0](https://github.com/bcosta19/mcp-gestao-tarefas/compare/v1.1.0...v1.2.0) (2026-09-21)
+
+
+### Features
+
+* adiciona tools rascunho_daily e criar_daily com varredura git ([7016cf9](https://github.com/bcosta19/mcp-gestao-tarefas/commit/7016cf9e77ebe8d8167c156ce33e0101800a668e))
+
+
+### Bug Fixes
+
+* isola HOME no teste de injectSkills ([f20f421](https://github.com/bcosta19/mcp-gestao-tarefas/commit/f20f4218d51f0ea98fa3855abfb89a4867c37f99))
+* valida .git real na varredura de repositorios da daily ([5e46604](https://github.com/bcosta19/mcp-gestao-tarefas/commit/5e466048295874ab28c91a52672a716c45c51819))
+
+
+### Documentation
+
+* reestrutura SKILL.md no padrao de Agent Skills ([c0338ce](https://github.com/bcosta19/mcp-gestao-tarefas/commit/c0338ceda6dde6ae32bf2ac295327519c3b2b063))
+* **skill:** differentiate MCP integration from Gestão de Tarefas app ([5489dc5](https://github.com/bcosta19/mcp-gestao-tarefas/commit/5489dc551b820c271c5d3ad596e97d948f1728c9))
+
 ## [1.1.0](https://github.com/bcosta19/mcp-gestao-tarefas/compare/v1.0.0...v1.1.0) (2026-08-22)
 
 
