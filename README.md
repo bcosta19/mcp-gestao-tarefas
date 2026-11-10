@@ -290,3 +290,38 @@ bun test
 A suíte cobre autenticação, detecção de contexto, bypass de projetos
 ignorados, comunicação HTTP, fila offline, sincronização e ferramentas MCP.
 A checagem de tipos roda com `bun run typecheck`.
+
+## Desempenho
+
+`bun run bench` mede o servidor via stdio: tempo até a resposta do
+`initialize`, RSS ocioso, latência de `tools/list` (500 chamadas) e de
+`obter_contexto_projeto` (100 chamadas, sem rede) e pico de RSS. Cada alvo roda
+15 vezes (`BENCH_RUNS`) após um aquecimento e o resultado é a mediana. A HOME
+é isolada e a API aponta para uma porta inalcançável. Requer Linux (`/proc`).
+
+Por padrão o alvo é `dist/mcp-gestao-tarefas`; outros alvos são passados como
+`rótulo=comando`. Para comparar com o build anterior em Node (`tsc` +
+`node dist/index.js`, commit `5489dc5`):
+
+```bash
+git worktree add /tmp/mcp-node 5489dc5
+(cd /tmp/mcp-node && npm ci && npx tsc)
+bun run build
+bun scripts/bench.ts "node=node /tmp/mcp-node/dist/index.js" \
+  "bun-jit=bun src/index.ts" "bun-aot=./dist/mcp-gestao-tarefas"
+git worktree remove --force /tmp/mcp-node
+```
+
+Resultado medido (Node v26.12.1, Bun 1.4.2, Linux x64):
+
+| Métrica | Node (`tsc`) | Bun sem compilar | Bun AOT |
+|---|---:|---:|---:|
+| Partida até `initialize` (ms) | 229 | 164 | 48 |
+| RSS ocioso (MB) | 98 | 78 | 60 |
+| RSS após carga / pico (MB) | 134 | 114 | 104 |
+| `tools/list` (µs) | 502 | 496 | 500 |
+| `obter_contexto_projeto` (ms) | 6,8 | 4,9 | 4,9 |
+
+O ganho de partida vem principalmente do AOT (arquivo único minificado com
+bytecode, sem resolução de módulos em `node_modules`). A latência por chamada é
+dominada pelo stdio e pela serialização JSON, por isso fica igual.

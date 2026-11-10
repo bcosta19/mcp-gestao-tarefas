@@ -17,7 +17,8 @@
     "setup": "bun src/cli/setup.ts",
     "auth:token": "bun src/cli/setup.ts",
     "test": "bun test",
-    "test:watch": "bun test --watch"
+    "test:watch": "bun test --watch",
+    "bench": "bun scripts/bench.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.0",
