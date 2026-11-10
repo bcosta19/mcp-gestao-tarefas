@@ -12,7 +12,7 @@ flowchart TD
         Agent["Agente de IA / LLM"]
     end
 
-    subgraph MCPServer["Servidor MCP independente (Node.js / TypeScript)"]
+    subgraph MCPServer["Servidor MCP independente (TypeScript / binário Bun)"]
         Tools["Ferramentas MCP\n(criar_demanda, criar_subtarefa, etc.)"]
         ContextEngine["Detector de contexto do projeto\n(Git / .gestaotarefas.json)"]
         DecisionEngine["Motor de decisão\n(demanda vs. subtarefa)"]
@@ -49,7 +49,7 @@ estruturados pelo servidor.
 
 ### Servidor MCP
 
-O servidor é executado como um processo Node.js compilado a partir do
+O servidor é executado como um binário autônomo compilado com Bun (AOT, `bun build --compile --bytecode`) a partir do
 TypeScript. Ele registra as ferramentas disponíveis e coordena a detecção de
 contexto, a tomada de decisão, a autenticação e a persistência offline.
 

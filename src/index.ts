@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { config } from './config.js';
 import { createServer } from './server.js';

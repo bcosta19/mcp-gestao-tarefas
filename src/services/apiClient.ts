@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { homeDir } from '../homeDir.js';
 import {
   Colaborador,
   DailyItemRascunho,
@@ -381,7 +381,7 @@ export class ApiClient {
 
   private persistSessionToken(tokenOrCookie: string): void {
     try {
-      const userConfigDir = path.join(os.homedir(), '.gestao-tarefas-mcp');
+      const userConfigDir = path.join(homeDir(), '.gestao-tarefas-mcp');
       const configFilePath = path.join(userConfigDir, 'config.json');
       let existing: any = {};
       if (fs.existsSync(configFilePath)) {

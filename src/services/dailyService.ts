@@ -1,5 +1,5 @@
 import fs from 'fs';
-import os from 'os';
+import { homeDir } from '../homeDir.js';
 import path from 'path';
 import { simpleGit } from 'simple-git';
 import { AppConfig } from '../config.js';
@@ -150,7 +150,7 @@ export class DailyService {
   private expandirHome(dir: string): string {
     const trimmed = dir.trim();
     if (trimmed.startsWith('~')) {
-      return path.join(os.homedir(), trimmed.slice(1));
+      return path.join(homeDir(), trimmed.slice(1));
     }
     return path.resolve(trimmed);
   }

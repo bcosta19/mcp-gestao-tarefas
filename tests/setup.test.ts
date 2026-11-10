@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -15,17 +15,17 @@ import {
 
 describe('setup CLI - MCP configuration automation', () => {
   describe('updateCodexTomlContent', () => {
-    const scriptPath = '/path/to/dist/index.js';
+    const binaryPath = '/path/to/dist/mcp-gestao-tarefas';
     const projectCwd = '/path/to/project';
     const apiUrl = 'https://gestao.exemplo.gov.br';
     const token = 'session_cookie_123';
 
     it('should format a fresh config when content is empty', () => {
-      const result = updateCodexTomlContent('', scriptPath, projectCwd, apiUrl, token);
+      const result = updateCodexTomlContent('', binaryPath, projectCwd, apiUrl, token);
 
       expect(result).toContain('[mcp_servers.gestao-tarefas]');
-      expect(result).toContain('command = "node"');
-      expect(result).toContain(`args = ["${scriptPath}"]`);
+      expect(result).toContain(`command = "${binaryPath}"`);
+      expect(result).not.toContain('args =');
       expect(result).toContain(`cwd = "${projectCwd}"`);
       expect(result).toContain('[mcp_servers.gestao-tarefas.env]');
       expect(result).toContain(`GESTAO_TAREFAS_API_URL = "${apiUrl}"`);
@@ -45,7 +45,7 @@ describe('setup CLI - MCP configuration automation', () => {
         'url = "http://10.0.0.1:49374/mcp"',
       ].join('\n');
 
-      const result = updateCodexTomlContent(initialToml, scriptPath, projectCwd, apiUrl, token);
+      const result = updateCodexTomlContent(initialToml, binaryPath, projectCwd, apiUrl, token);
 
       expect(result).toContain('model = "gpt-5.4-mini"');
       expect(result).toContain('[projects."/home/user/project"]');
@@ -70,12 +70,13 @@ describe('setup CLI - MCP configuration automation', () => {
         'status_line_use_colors = true',
       ].join('\n');
 
-      const result = updateCodexTomlContent(initialToml, scriptPath, projectCwd, apiUrl, token);
+      const result = updateCodexTomlContent(initialToml, binaryPath, projectCwd, apiUrl, token);
 
       expect(result).toContain('model = "gpt-5.4-mini"');
       expect(result).not.toContain('/old/path.js');
       expect(result).not.toContain('https://old.url');
-      expect(result).toContain(`args = ["${scriptPath}"]`);
+      expect(result).not.toContain('command = "node"');
+      expect(result).toContain(`command = "${binaryPath}"`);
       expect(result).toContain(`GESTAO_TAREFAS_API_URL = "${apiUrl}"`);
       expect(result).toContain('[tui]');
       expect(result).toContain('status_line_use_colors = true');
@@ -99,7 +100,7 @@ describe('setup CLI - MCP configuration automation', () => {
 
       const success = injectIntoCodex(
         codexFile,
-        '/test/dist/index.js',
+        '/test/dist/mcp-gestao-tarefas',
         'https://test.gov.br',
         'tok123',
         '/test/cwd'
@@ -117,7 +118,7 @@ describe('setup CLI - MCP configuration automation', () => {
 
       const success = injectIntoOpenCode(
         opencodeFile,
-        '/test/dist/index.js',
+        '/test/dist/mcp-gestao-tarefas',
         'https://test.gov.br',
         'tok123'
       );
@@ -125,7 +126,7 @@ describe('setup CLI - MCP configuration automation', () => {
       expect(success).toBe(true);
       const content = JSON.parse(fs.readFileSync(opencodeFile, 'utf8'));
       expect(content.mcp['gestao-tarefas']).toBeDefined();
-      expect(content.mcp['gestao-tarefas'].command).toEqual(['node', '/test/dist/index.js']);
+      expect(content.mcp['gestao-tarefas'].command).toEqual(['/test/dist/mcp-gestao-tarefas']);
       expect(content.mcp['gestao-tarefas'].environment.GESTAO_TAREFAS_API_URL).toBe(
         'https://test.gov.br'
       );
@@ -137,7 +138,7 @@ describe('setup CLI - MCP configuration automation', () => {
 
       const success = injectIntoStandardJsonMcpClients(
         mcpFile,
-        '/test/dist/index.js',
+        '/test/dist/mcp-gestao-tarefas',
         'https://test.gov.br',
         'tok123'
       );
@@ -145,7 +146,8 @@ describe('setup CLI - MCP configuration automation', () => {
       expect(success).toBe(true);
       const content = JSON.parse(fs.readFileSync(mcpFile, 'utf8'));
       expect(content.mcpServers['gestao-tarefas']).toBeDefined();
-      expect(content.mcpServers['gestao-tarefas'].args).toEqual(['/test/dist/index.js']);
+      expect(content.mcpServers['gestao-tarefas'].command).toBe('/test/dist/mcp-gestao-tarefas');
+      expect(content.mcpServers['gestao-tarefas'].args).toEqual([]);
     });
 
     describe('Pi harness (pi-mcp-adapter)', () => {
@@ -165,7 +167,7 @@ describe('setup CLI - MCP configuration automation', () => {
 
       it('should not inject when the Pi agent dir does not exist', () => {
         const success = injectIntoPi(
-          '/test/dist/index.js',
+          '/test/dist/mcp-gestao-tarefas',
           'https://test.gov.br',
           'tok123',
           path.join(tmpDir, 'missing-pi')
@@ -187,7 +189,7 @@ describe('setup CLI - MCP configuration automation', () => {
         );
 
         const success = injectIntoPi(
-          '/test/dist/index.js',
+          '/test/dist/mcp-gestao-tarefas',
           'https://test.gov.br',
           'tok123',
           piAgentDir
@@ -199,8 +201,8 @@ describe('setup CLI - MCP configuration automation', () => {
         );
         expect(content.settings.toolPrefix).toBe('short');
         expect(content.mcpServers['gestao-tarefas']).toBeDefined();
-        expect(content.mcpServers['gestao-tarefas'].command).toBe('node');
-        expect(content.mcpServers['gestao-tarefas'].args).toEqual(['/test/dist/index.js']);
+        expect(content.mcpServers['gestao-tarefas'].command).toBe('/test/dist/mcp-gestao-tarefas');
+        expect(content.mcpServers['gestao-tarefas'].args).toEqual([]);
         expect(content.mcpServers['gestao-tarefas'].env.GESTAO_TAREFAS_API_URL).toBe(
           'https://test.gov.br'
         );

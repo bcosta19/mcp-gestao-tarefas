@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { homeDir } from '../homeDir.js';
 import readline from 'readline';
 import { execFileSync } from 'child_process';
 import axios from 'axios';
@@ -146,15 +146,14 @@ async function performAutomatedLogin(
 
 export function updateCodexTomlContent(
   content: string,
-  scriptPath: string,
+  binaryPath: string,
   projectCwd: string,
   apiUrl: string,
   token: string
 ): string {
   const newSectionLines = [
     '[mcp_servers.gestao-tarefas]',
-    'command = "node"',
-    `args = [${JSON.stringify(scriptPath)}]`,
+    `command = ${JSON.stringify(binaryPath)}`,
     `cwd = ${JSON.stringify(projectCwd)}`,
     '',
     '[mcp_servers.gestao-tarefas.env]',
@@ -210,7 +209,7 @@ export function updateCodexTomlContent(
 
 export function injectIntoCodex(
   configPath: string,
-  scriptPath: string,
+  binaryPath: string,
   apiUrl: string,
   token: string,
   projectCwd: string = process.cwd()
@@ -226,7 +225,7 @@ export function injectIntoCodex(
       content = fs.readFileSync(configPath, 'utf8');
     }
 
-    const updatedContent = updateCodexTomlContent(content, scriptPath, projectCwd, apiUrl, token);
+    const updatedContent = updateCodexTomlContent(content, binaryPath, projectCwd, apiUrl, token);
     fs.writeFileSync(configPath, updatedContent, 'utf8');
     return true;
   } catch {
@@ -236,7 +235,7 @@ export function injectIntoCodex(
 
 export function injectIntoOpenCode(
   configPath: string,
-  scriptPath: string,
+  binaryPath: string,
   apiUrl: string,
   token: string
 ): boolean {
@@ -264,7 +263,7 @@ export function injectIntoOpenCode(
 
     configObj.mcp['gestao-tarefas'] = {
       type: 'local',
-      command: ['node', scriptPath],
+      command: [binaryPath],
       enabled: true,
       environment: {
         GESTAO_TAREFAS_API_URL: apiUrl,
@@ -285,7 +284,7 @@ export function injectIntoOpenCode(
 
 export function injectIntoStandardJsonMcpClients(
   configPath: string,
-  scriptPath: string,
+  binaryPath: string,
   apiUrl: string,
   token: string
 ): boolean {
@@ -312,8 +311,8 @@ export function injectIntoStandardJsonMcpClients(
     }
 
     configObj.mcpServers['gestao-tarefas'] = {
-      command: 'node',
-      args: [scriptPath],
+      command: binaryPath,
+      args: [],
       env: {
         GESTAO_TAREFAS_API_URL: apiUrl,
         GESTAO_TAREFAS_API_TOKEN: token,
@@ -330,7 +329,7 @@ export function injectIntoStandardJsonMcpClients(
 }
 
 export function getPiAgentDir(): string {
-  return process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent');
+  return process.env.PI_CODING_AGENT_DIR || path.join(homeDir(), '.pi', 'agent');
 }
 
 /**
@@ -339,7 +338,7 @@ export function getPiAgentDir(): string {
  * override global do Pi é `<Pi agent dir>/mcp.json` (~/.pi/agent/mcp.json).
  */
 export function injectIntoPi(
-  scriptPath: string,
+  binaryPath: string,
   apiUrl: string,
   token: string,
   agentDir: string = getPiAgentDir()
@@ -350,7 +349,7 @@ export function injectIntoPi(
 
   return injectIntoStandardJsonMcpClients(
     path.join(agentDir, 'mcp.json'),
-    scriptPath,
+    binaryPath,
     apiUrl,
     token
   );
@@ -385,7 +384,7 @@ export function ensurePiMcpAdapter(
 
 export function injectSkills(projectDir: string = process.cwd()): string[] {
   const updatedSkills: string[] = [];
-  const homedir = os.homedir();
+  const homedir = homeDir();
 
   const skillSourceFile = path.join(projectDir, 'skills', 'gestao-tarefas', 'SKILL.md');
   if (!fs.existsSync(skillSourceFile)) {
@@ -465,13 +464,13 @@ export function injectSkills(projectDir: string = process.cwd()): string[] {
 }
 
 export function injectIntoMcpClients(
-  scriptPath: string,
+  binaryPath: string,
   apiUrl: string,
   token: string,
   projectCwd: string = process.cwd()
 ): string[] {
   const updatedFiles: string[] = [];
-  const homedir = os.homedir();
+  const homedir = homeDir();
 
   // 1. Clientes MCP JSON padrão (Claude Code, Claude Desktop, Gemini, Antigravity CLI, Cursor)
   const standardConfigs = [
@@ -483,7 +482,7 @@ export function injectIntoMcpClients(
   ];
 
   for (const cfgPath of standardConfigs) {
-    if (injectIntoStandardJsonMcpClients(cfgPath, scriptPath, apiUrl, token)) {
+    if (injectIntoStandardJsonMcpClients(cfgPath, binaryPath, apiUrl, token)) {
       updatedFiles.push(cfgPath);
     }
   }
@@ -495,7 +494,7 @@ export function injectIntoMcpClients(
   ];
 
   for (const cfgPath of opencodeConfigs) {
-    if (injectIntoOpenCode(cfgPath, scriptPath, apiUrl, token)) {
+    if (injectIntoOpenCode(cfgPath, binaryPath, apiUrl, token)) {
       updatedFiles.push(cfgPath);
     }
   }
@@ -505,13 +504,13 @@ export function injectIntoMcpClients(
   const codexConfigs = [path.join(codexDir, 'config.toml')];
 
   for (const cfgPath of codexConfigs) {
-    if (injectIntoCodex(cfgPath, scriptPath, apiUrl, token, projectCwd)) {
+    if (injectIntoCodex(cfgPath, binaryPath, apiUrl, token, projectCwd)) {
       updatedFiles.push(cfgPath);
     }
   }
 
   // 4. Pi harness (~/.pi/agent/mcp.json via pi-mcp-adapter)
-  if (injectIntoPi(scriptPath, apiUrl, token)) {
+  if (injectIntoPi(binaryPath, apiUrl, token)) {
     updatedFiles.push(path.join(getPiAgentDir(), 'mcp.json'));
   }
 
@@ -673,7 +672,7 @@ export async function runSetup() {
   fs.writeFileSync(envPath, envContent, 'utf8');
 
   // 2. Salva também globalmente em ~/.gestao-tarefas-mcp/config.json
-  const userConfigDir = path.join(os.homedir(), '.gestao-tarefas-mcp');
+  const userConfigDir = path.join(homeDir(), '.gestao-tarefas-mcp');
   if (!fs.existsSync(userConfigDir)) {
     fs.mkdirSync(userConfigDir, { recursive: true });
   }
@@ -694,8 +693,8 @@ export async function runSetup() {
   );
 
   // 3. Injeta automaticamente nos arquivos de configuração dos clientes MCP detectados
-  const scriptPath = path.resolve(process.cwd(), 'dist/index.js');
-  const injectedConfigs = injectIntoMcpClients(scriptPath, apiUrl, token);
+  const binaryPath = path.resolve(process.cwd(), 'dist/mcp-gestao-tarefas');
+  const injectedConfigs = injectIntoMcpClients(binaryPath, apiUrl, token);
 
   // 4. Injeta a Skill nos clientes suportados (Codex, Antigravity CLI, Claude e Pi)
   const injectedSkills = injectSkills(process.cwd());
@@ -737,7 +736,7 @@ export async function runSetup() {
   process.exit(0);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename || '')) {
+if (import.meta.main) {
   runSetup()
     .then(() => process.exit(0))
     .catch((err) => {

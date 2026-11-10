@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
-import os from 'os';
+import { homeDir } from './homeDir.js';
 import fs from 'fs';
 
 dotenv.config();
@@ -20,14 +20,14 @@ export interface AppConfig {
 
 function resolvePath(p: string): string {
   if (p.startsWith('~')) {
-    return path.join(os.homedir(), p.slice(1));
+    return path.join(homeDir(), p.slice(1));
   }
   return path.resolve(p);
 }
 
 function loadGlobalUserConfig(): { apiUrl?: string; apiToken?: string; email?: string; password?: string } {
   try {
-    const configFilePath = path.join(os.homedir(), '.gestao-tarefas-mcp', 'config.json');
+    const configFilePath = path.join(homeDir(), '.gestao-tarefas-mcp', 'config.json');
     if (fs.existsSync(configFilePath)) {
       const content = fs.readFileSync(configFilePath, 'utf8');
       return JSON.parse(content);
@@ -39,7 +39,7 @@ function loadGlobalUserConfig(): { apiUrl?: string; apiToken?: string; email?: s
 }
 
 export function loadConfig(overrides?: Partial<AppConfig>): AppConfig {
-  const defaultQueuePath = path.join(os.homedir(), '.gestao-tarefas-mcp', 'queue.sqlite');
+  const defaultQueuePath = path.join(homeDir(), '.gestao-tarefas-mcp', 'queue.sqlite');
   const rawQueuePath = overrides?.offlineQueuePath || process.env.OFFLINE_QUEUE_PATH || defaultQueuePath;
 
   const globalUserCfg = loadGlobalUserConfig();

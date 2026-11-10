@@ -5,16 +5,20 @@ agentes de desenvolvimento ao sistema de Gestão de Tarefas.
 
 ## Requisitos
 
-- Node.js 22.5 ou superior;
+- [Bun](https://bun.sh) 1.4 ou superior (apenas para compilar; o binário gerado é autônomo);
 - acesso ao servidor de Gestão de Tarefas;
 - credenciais válidas ou um token de autenticação.
 
 ## Instalação
 
 ```bash
-npm install
-npm run build
+bun install
+bun run build
 ```
+
+O build gera o executável autônomo `dist/mcp-gestao-tarefas` com
+`bun build --compile --bytecode` (código pré-compilado para bytecode, sem
+dependência de Node.js ou Bun em tempo de execução).
 
 ## Configuração e autenticação
 
@@ -23,7 +27,7 @@ pode ser informada pela variável `GESTAO_TAREFAS_API_URL`, pelo argumento
 `--api-url` ou durante a execução do assistente.
 
 ```bash
-npm run setup
+bun run setup
 ```
 
 Quando a URL não estiver configurada no ambiente, o assistente sugerirá o padrão da Codemar:
@@ -35,7 +39,7 @@ URL do Gestão de Tarefas (https://gestaotarefas-codemar.marica.rj.gov.br):
 Também é possível informar os dados de acesso por argumento:
 
 ```bash
-npm run setup -- \
+bun run setup -- \
   --api-url=https://seu-servidor-de-gestao.exemplo \
   --email=seu.email@empresa.gov.br \
   --password=suasenha
@@ -44,7 +48,7 @@ npm run setup -- \
 Para usar uma sessão web ou um token já existente:
 
 ```bash
-npm run setup -- --api-url=https://seu-servidor-de-gestao.exemplo --token=SEU_TOKEN
+bun run setup -- --api-url=https://seu-servidor-de-gestao.exemplo --token=SEU_TOKEN
 ```
 
 O assistente tenta autenticar por endpoint JSON e, caso não esteja disponível,
@@ -109,11 +113,11 @@ registros, evitando o uso acidental do MCP em outros repositórios.
 
 ## Execução
 
-O servidor usa stdio e deve ser executado a partir do build:
+O servidor usa stdio e é executado pelo binário compilado:
 
 ```bash
-npm run build
-node dist/index.js
+bun run build
+./dist/mcp-gestao-tarefas
 ```
 
 Exemplo para o **Claude Code** (`~/.claude.json`), **Claude Desktop** (`claude_desktop_config.json`), **Antigravity CLI** e **Cursor**:
@@ -122,8 +126,8 @@ Exemplo para o **Claude Code** (`~/.claude.json`), **Claude Desktop** (`claude_d
 {
   "mcpServers": {
     "gestao-tarefas": {
-      "command": "node",
-      "args": ["/caminho/para/mcp-gestao-tarefas/dist/index.js"],
+      "command": "/caminho/para/mcp-gestao-tarefas/dist/mcp-gestao-tarefas",
+      "args": [],
       "env": {
         "GESTAO_TAREFAS_API_URL": "https://seu-servidor-de-gestao.exemplo",
         "GESTAO_TAREFAS_API_TOKEN": "CONFIGURADO_LOCALMENTE",
@@ -142,15 +146,14 @@ claude mcp add --env GESTAO_TAREFAS_API_URL=https://seu-servidor-de-gestao.exemp
   --env GESTAO_TAREFAS_API_TOKEN=CONFIGURADO_LOCALMENTE \
   --env OFFLINE_QUEUE_PATH=~/.gestao-tarefas-mcp/queue.sqlite \
   --env IGNORE_EXTERNAL_PROJECTS=true \
-  --transport stdio gestao-tarefas -- node /caminho/para/mcp-gestao-tarefas/dist/index.js
+  --transport stdio gestao-tarefas -- /caminho/para/mcp-gestao-tarefas/dist/mcp-gestao-tarefas
 ```
 
 Exemplo para o **Codex** (`~/.codex/config.toml`):
 
 ```toml
 [mcp_servers.gestao-tarefas]
-command = "node"
-args = ["/caminho/para/mcp-gestao-tarefas/dist/index.js"]
+command = "/caminho/para/mcp-gestao-tarefas/dist/mcp-gestao-tarefas"
 cwd = "/caminho/para/mcp-gestao-tarefas"
 
 [mcp_servers.gestao-tarefas.env]
@@ -167,7 +170,7 @@ Exemplo para o **OpenCode** (`~/.config/opencode/opencode.json`):
   "mcp": {
     "gestao-tarefas": {
       "type": "local",
-      "command": ["node", "/caminho/para/mcp-gestao-tarefas/dist/index.js"],
+      "command": ["/caminho/para/mcp-gestao-tarefas/dist/mcp-gestao-tarefas"],
       "enabled": true,
       "environment": {
         "GESTAO_TAREFAS_API_URL": "https://seu-servidor-de-gestao.exemplo",
@@ -183,7 +186,7 @@ Exemplo para o **OpenCode** (`~/.config/opencode/opencode.json`):
 ### Harness Pi
 
 O [Pi](https://pi.dev) não possui MCP nativo: o suporte vem do pacote
-[pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). O `npm run setup`
+[pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). O `bun run setup`
 detecta o diretório do agente (`~/.pi/agent`, ou `PI_CODING_AGENT_DIR`),
 grava o servidor em `~/.pi/agent/mcp.json`, instala a skill em
 `~/.pi/agent/skills/` e executa `pi install npm:pi-mcp-adapter` quando o
@@ -197,8 +200,8 @@ pi install npm:pi-mcp-adapter
 {
   "mcpServers": {
     "gestao-tarefas": {
-      "command": "node",
-      "args": ["/caminho/para/mcp-gestao-tarefas/dist/index.js"],
+      "command": "/caminho/para/mcp-gestao-tarefas/dist/mcp-gestao-tarefas",
+      "args": [],
       "env": {
         "GESTAO_TAREFAS_API_URL": "https://seu-servidor-de-gestao.exemplo",
         "GESTAO_TAREFAS_API_TOKEN": "CONFIGURADO_LOCALMENTE",
@@ -210,7 +213,7 @@ pi install npm:pi-mcp-adapter
 }
 ```
 
-Após alterar o código, execute `npm run build` e reinicie o cliente MCP.
+Após alterar o código, execute `bun run build` e reinicie o cliente MCP.
 
 A visão geral dos componentes e dos fluxos está em
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -226,8 +229,8 @@ Configure o servidor MCP deste projeto.
 1. Leia o README.md e identifique o cliente MCP em uso.
 2. Use o diretório atual como diretório do projeto.
 3. Instale as dependências apenas se necessário.
-4. Execute npm run build.
-5. Registre o servidor usando node dist/index.js e preserve as demais
+4. Execute bun run build.
+5. Registre o servidor usando o binário dist/mcp-gestao-tarefas e preserve as demais
    configurações existentes do cliente.
 6. Solicite a URL do servidor e a autenticação caso ainda não estejam
    configuradas. Não exiba nem grave tokens ou senhas no chat.
@@ -281,8 +284,9 @@ Para desativar o MCP somente nesse repositório, use o mesmo arquivo:
 ## Testes
 
 ```bash
-npm test
+bun test
 ```
 
 A suíte cobre autenticação, detecção de contexto, bypass de projetos
 ignorados, comunicação HTTP, fila offline, sincronização e ferramentas MCP.
+A checagem de tipos roda com `bun run typecheck`.

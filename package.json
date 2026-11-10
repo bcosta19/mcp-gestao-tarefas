@@ -2,21 +2,22 @@
   "name": "mcp-gestao-tarefas",
   "version": "1.1.0",
   "description": "MCP Server Standalone para integração de Agentes com o Gestão de Tarefas",
-  "main": "dist/index.js",
+  "module": "src/index.ts",
   "type": "module",
   "bin": {
-    "mcp-gestao-tarefas": "./dist/index.js"
+    "mcp-gestao-tarefas": "./dist/mcp-gestao-tarefas"
   },
   "scripts": {
-    "build": "tsc",
-    "postbuild": "node -e \"import('./dist/cli/setup.js').then(m => { const u = m.injectSkills(process.cwd()); if (u.length) console.log('🎯 Skills sincronizadas automaticamente:', u); })\"",
-    "skills:sync": "node -e \"import('./dist/cli/setup.js').then(m => { const u = m.injectSkills(process.cwd()); console.log('🎯 Skills sincronizadas em:', u); })\"",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
-    "setup": "tsx src/cli/setup.ts",
-    "auth:token": "tsx src/cli/setup.ts",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "build": "bun build src/index.ts --compile --minify --sourcemap --bytecode --outfile dist/mcp-gestao-tarefas",
+    "postbuild": "bun -e \"const m = await import('./src/cli/setup.ts'); const u = m.injectSkills(process.cwd()); if (u.length) console.log('🎯 Skills sincronizadas automaticamente:', u);\"",
+    "skills:sync": "bun -e \"const m = await import('./src/cli/setup.ts'); const u = m.injectSkills(process.cwd()); console.log('🎯 Skills sincronizadas em:', u);\"",
+    "typecheck": "tsc --noEmit",
+    "start": "./dist/mcp-gestao-tarefas",
+    "dev": "bun --watch src/index.ts",
+    "setup": "bun src/cli/setup.ts",
+    "auth:token": "bun src/cli/setup.ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.0",
@@ -26,9 +27,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/node": "^22.13.5",
-    "tsx": "^4.19.3",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.6"
+    "@types/bun": "latest",
+    "typescript": "^5.7.3"
   }
 }

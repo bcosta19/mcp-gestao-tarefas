@@ -20,7 +20,7 @@ fi
 
 echo "⬇️  $BEHIND commit(s) atrás de origin/$BRANCH, atualizando..."
 git pull --ff-only
-npm ci
-npm run build
+bun install --frozen-lockfile
+bun run build
 
 echo "🎉 Atualizado para $(git rev-parse --short HEAD)"
